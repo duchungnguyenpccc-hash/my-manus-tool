@@ -1,0 +1,464 @@
+# The Faceless POV AI Machine 🎬✨
+
+An elegant, automated AI-powered video generation platform that transforms ideas into professional videos in minutes. From script generation to YouTube upload, everything is fully automated.
+
+## 🚀 Features
+
+### Core Capabilities
+- **🤖 AI Script Generation** - Automatic script creation from topics using OpenAI GPT-4
+- **🎨 Image Generation** - Create stunning visuals with Flux and Qwen AI models via PiAPI
+- **🎬 Video Creation** - Convert images to dynamic videos using Veo3 and Kling
+- **🎙️ Voice Generation** - Natural-sounding narration with 8 voice options via ElevenLabs
+- **🎞️ Video Rendering** - Professional video composition and effects with Creatomate
+- **📤 Auto YouTube Upload** - Automatically publish to YouTube with optimized metadata
+- **📊 Progress Tracking** - Real-time monitoring of your video generation pipeline
+- **🔐 Secure API Management** - AES-256 encrypted API key storage
+
+### Workflow Pipeline
+```
+Topic Input 
+  ↓
+Script Generation (OpenAI)
+  ↓
+Image Prompt Enhancement (OpenAI)
+  ↓
+Image Generation (PiAPI - Flux/Qwen)
+  ↓
+Video Clip Generation (PiAPI - Veo3/Kling)
+  ↓
+Voice Generation (ElevenLabs TTS)
+  ↓
+Video Rendering (Creatomate)
+  ↓
+YouTube Upload (YouTube Data API v3)
+  ↓
+Completion & Analytics
+```
+
+## 🛠️ Tech Stack
+
+### Frontend
+- **React 19** - Modern UI framework
+- **TypeScript** - Type-safe development
+- **Tailwind CSS 4** - Utility-first styling
+- **shadcn/ui** - High-quality component library
+- **tRPC** - Type-safe API calls
+- **Wouter** - Lightweight routing
+
+### Backend
+- **Node.js + Express** - Server framework
+- **tRPC** - RPC framework
+- **MySQL/TiDB** - Database
+- **Drizzle ORM** - Type-safe database access
+- **Vitest** - Unit testing framework
+
+### External APIs
+- **OpenAI API** - Script and prompt generation
+- **PiAPI** - Image and video generation
+- **ElevenLabs API** - Text-to-speech
+- **Creatomate API** - Video rendering
+- **YouTube Data API v3** - Video uploads
+- **Manus OAuth** - Authentication
+- **AWS S3** - Asset storage
+
+## 📦 Installation
+
+### Prerequisites
+- Node.js 22+
+- pnpm package manager
+- MySQL/TiDB database
+- API keys for all external services
+
+### Setup
+
+1. **Clone and install dependencies**
+```bash
+cd faceless-pov-ai-machine
+pnpm install
+```
+
+2. **Configure environment variables**
+```bash
+# Create .env file with your API keys
+OPENAI_API_KEY=sk-...
+PIAPI_API_KEY=pi_...
+ELEVENLABS_API_KEY=sk_...
+CREATOMATE_API_KEY=ct_...
+YOUTUBE_CLIENT_ID=...
+YOUTUBE_CLIENT_SECRET=...
+DATABASE_URL=mysql://...
+```
+
+3. **Setup database**
+```bash
+pnpm drizzle-kit generate
+pnpm drizzle-kit migrate
+```
+
+4. **Start development server**
+```bash
+pnpm dev
+```
+
+Visit `http://localhost:3000` to access the application.
+
+## 📚 API Documentation
+
+### Authentication
+All API endpoints require authentication via Manus OAuth. The session is automatically managed through cookies.
+
+### tRPC Procedures
+
+#### API Key Management
+```typescript
+// Add/update API key
+trpc.apiKey.add.useMutation({
+  provider: "openai",
+  key: "sk-...",
+})
+
+// List user's API keys
+trpc.apiKey.list.useQuery()
+
+// Test API key
+trpc.apiKey.test.useMutation({
+  provider: "openai",
+})
+
+// Delete API key
+trpc.apiKey.delete.useMutation({
+  provider: "openai",
+})
+```
+
+#### Script Generation
+```typescript
+// Generate video script
+trpc.script.generate.useMutation({
+  topic: "How to make coffee",
+  sceneCount: 5,
+  duration: 60,
+})
+
+// Enhance image prompts
+trpc.script.enhancePrompts.useMutation({
+  prompts: ["A coffee cup", "Pouring water"],
+})
+
+// Generate video metadata
+trpc.script.generateMetadata.useMutation({
+  topic: "How to make coffee",
+  scriptLength: 500,
+})
+```
+
+#### Image & Video Generation
+```typescript
+// Generate image from prompt
+trpc.imageVideo.generateImage.useMutation({
+  prompt: "A beautiful coffee cup",
+  model: "flux", // or "qwen"
+})
+
+// Generate video from image
+trpc.imageVideo.generateVideo.useMutation({
+  imageUrl: "https://...",
+  model: "veo3", // or "kling"
+  duration: 5,
+})
+
+// Batch generate images
+trpc.imageVideo.generateImageBatch.useMutation({
+  prompts: ["Image 1", "Image 2"],
+  model: "flux",
+})
+```
+
+#### Audio Generation
+```typescript
+// Generate speech
+trpc.audio.generateSpeech.useMutation({
+  text: "Welcome to my video",
+  voiceId: "alloy", // or other voice presets
+})
+
+// Generate multi-segment audio
+trpc.audio.generateMultiSegmentSpeech.useMutation({
+  segments: [
+    { text: "Intro", voiceId: "alloy" },
+    { text: "Main content", voiceId: "echo" },
+  ],
+})
+
+// Get available voices
+trpc.audio.getVoices.useQuery()
+```
+
+#### Video Rendering
+```typescript
+// Render final video
+trpc.render.renderVideo.useMutation({
+  videoClips: [{ url: "...", duration: 5 }],
+  audioUrl: "https://...",
+  textOverlays: [{ text: "Title", position: "center" }],
+})
+
+// Get render job status
+trpc.render.getJobStatus.useQuery({
+  jobId: "...",
+})
+
+// Cancel render job
+trpc.render.cancelJob.useMutation({
+  jobId: "...",
+})
+```
+
+#### YouTube Upload
+```typescript
+// Upload video to YouTube
+trpc.youtube.uploadVideo.useMutation({
+  projectId: 1,
+  videoUrl: "https://...",
+  title: "My Awesome Video",
+  description: "Check this out!",
+  tags: ["ai", "video"],
+  privacyStatus: "public",
+})
+
+// Get video info
+trpc.youtube.getVideoInfo.useQuery({
+  videoId: "dQw4w9WgXcQ",
+})
+
+// Update video metadata
+trpc.youtube.updateMetadata.useMutation({
+  videoId: "dQw4w9WgXcQ",
+  title: "Updated Title",
+  description: "Updated description",
+})
+
+// Get channel info
+trpc.youtube.getChannelInfo.useQuery()
+
+// List playlists
+trpc.youtube.listPlaylists.useQuery()
+
+// Create playlist
+trpc.youtube.createPlaylist.useMutation({
+  title: "My Videos",
+  description: "Collection of AI videos",
+})
+
+// Add video to playlist
+trpc.youtube.addToPlaylist.useMutation({
+  videoId: "dQw4w9WgXcQ",
+  playlistId: "PLxxxxxx",
+})
+```
+
+#### Workflow Management
+```typescript
+// Create workflow tasks
+trpc.workflow.createTasks.useMutation({
+  projectId: 1,
+  steps: [
+    { taskType: "script", input: { topic: "..." } },
+    { taskType: "image", input: { prompt: "..." } },
+    { taskType: "video", input: { imageUrl: "..." } },
+    { taskType: "audio", input: { text: "..." } },
+    { taskType: "render", input: { clips: [...] } },
+    { taskType: "upload", input: { videoUrl: "..." } },
+  ],
+})
+
+// Get workflow progress
+trpc.workflow.getProgress.useQuery({
+  projectId: 1,
+})
+
+// Get all tasks
+trpc.workflow.getTasks.useQuery({
+  projectId: 1,
+})
+
+// Update task status
+trpc.workflow.updateTaskStatus.useMutation({
+  taskId: 1,
+  status: "completed",
+  output: { videoId: "..." },
+})
+
+// Retry failed task
+trpc.workflow.retryTask.useMutation({
+  taskId: 1,
+})
+
+// Skip task
+trpc.workflow.skipTask.useMutation({
+  taskId: 1,
+  reason: "Not needed",
+})
+
+// Cancel all project tasks
+trpc.workflow.cancelProject.useMutation({
+  projectId: 1,
+  reason: "User cancelled",
+})
+
+// Get workflow statistics
+trpc.workflow.getStats.useQuery({
+  projectId: 1,
+})
+```
+
+## 🔐 Security
+
+### API Key Encryption
+All API keys are encrypted using AES-256-GCM before storage in the database. The encryption key is derived from the application's JWT secret.
+
+### Authentication
+- Manus OAuth for user authentication
+- Session-based authentication with secure HTTP-only cookies
+- Protected procedures require valid user context
+
+### Data Protection
+- All sensitive data is encrypted at rest
+- API keys are never logged or exposed
+- Secure S3 storage for generated assets
+
+## 📊 Database Schema
+
+### Users
+- `id` - Primary key
+- `openId` - Manus OAuth identifier
+- `name` - User name
+- `email` - User email
+- `role` - User role (user/admin)
+- `createdAt`, `updatedAt`, `lastSignedIn` - Timestamps
+
+### API Keys
+- `id` - Primary key
+- `userId` - Foreign key to users
+- `provider` - Provider name (openai, piapi, elevenlabs, creatomate, youtube)
+- `encryptedKey` - Encrypted API key
+- `isActive` - Active status
+- `lastTestedAt` - Last test timestamp
+
+### Video Projects
+- `id` - Primary key
+- `userId` - Foreign key to users
+- `title` - Project title
+- `topic` - Video topic
+- `status` - Project status (draft, processing, completed, failed, archived)
+- `config` - JSON configuration
+- `youtubeVideoId`, `youtubeUrl` - YouTube upload info
+
+### Workflow Tasks
+- `id` - Primary key
+- `projectId` - Foreign key to video_projects
+- `taskType` - Task type (script, image, video, audio, render, upload)
+- `status` - Task status (pending, processing, completed, failed, skipped)
+- `input`, `output` - JSON data
+- `error` - Error message
+- `retryCount`, `maxRetries` - Retry tracking
+
+### Generated Assets
+- `id` - Primary key
+- `taskId` - Foreign key to workflow_tasks
+- `projectId` - Foreign key to video_projects
+- `assetType` - Asset type (image, video, audio, script)
+- `s3Key`, `s3Url` - S3 storage info
+- `metadata` - JSON metadata
+
+### YouTube Uploads
+- `id` - Primary key
+- `projectId` - Foreign key to video_projects
+- `videoId` - YouTube video ID
+- `title`, `description`, `tags` - Video metadata
+- `status` - Upload status
+- `youtubeUrl` - Video URL
+- `viewCount`, `likeCount`, `commentCount` - Analytics
+
+## 🧪 Testing
+
+Run tests with:
+```bash
+pnpm test
+```
+
+Run tests in watch mode:
+```bash
+pnpm test:watch
+```
+
+Test coverage:
+```bash
+pnpm test:coverage
+```
+
+## 📝 Development
+
+### Project Structure
+```
+faceless-pov-ai-machine/
+├── client/                 # React frontend
+│   ├── src/
+│   │   ├── pages/         # Page components
+│   │   ├── components/    # Reusable components
+│   │   ├── lib/           # Utilities
+│   │   └── App.tsx        # Main app
+│   └── public/            # Static assets
+├── server/                # Express backend
+│   ├── services/          # Business logic
+│   ├── routers/           # tRPC routers
+│   ├── db.ts              # Database helpers
+│   └── routers.ts         # Main router
+├── drizzle/               # Database schema
+├── shared/                # Shared types
+└── storage/               # S3 helpers
+```
+
+### Adding New Features
+
+1. **Update database schema** (`drizzle/schema.ts`)
+2. **Generate migration** (`pnpm drizzle-kit generate`)
+3. **Apply migration** (via webdev_execute_sql)
+4. **Add database helpers** (`server/db.ts`)
+5. **Create tRPC procedures** (`server/routers/`)
+6. **Build UI components** (`client/src/pages/` or `client/src/components/`)
+7. **Write tests** (`*.test.ts`)
+8. **Update documentation**
+
+## 🚀 Deployment
+
+The application is ready for deployment on Manus platform. Use the Management UI to:
+1. Configure custom domain
+2. Set environment variables
+3. Monitor analytics
+4. Manage database
+
+## 📞 Support
+
+For issues and questions:
+- Check the documentation
+- Review test files for usage examples
+- Check logs in `.manus-logs/` directory
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+## 🙏 Acknowledgments
+
+Built with:
+- OpenAI for AI capabilities
+- PiAPI for image/video generation
+- ElevenLabs for voice synthesis
+- Creatomate for video rendering
+- YouTube for video hosting
+- Manus for hosting and authentication
+
+---
+
+**Created with ❤️ by the Faceless POV AI Machine team**
