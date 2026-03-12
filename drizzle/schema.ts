@@ -232,3 +232,58 @@ export const analyticsFeedback = mysqlTable("analytics_feedback", {
 
 export type AnalyticsFeedback = typeof analyticsFeedback.$inferSelect;
 export type InsertAnalyticsFeedback = typeof analyticsFeedback.$inferInsert;
+
+/**
+ * Campaigns - lớp Control Plane để quản lý chiến dịch theo niche
+ */
+export const campaigns = mysqlTable("campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  nicheId: int("nicheId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["active", "paused", "archived"]).default("active").notNull(),
+  strategy: json("strategy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Campaign = typeof campaigns.$inferSelect;
+export type InsertCampaign = typeof campaigns.$inferInsert;
+
+/**
+ * Topic candidates - ideas do Trend + AI generator tạo ra trước khi vào queue
+ */
+export const topicCandidates = mysqlTable("topic_candidates", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  nicheId: int("nicheId").notNull(),
+  topic: text("topic").notNull(),
+  titleSuggestion: varchar("titleSuggestion", { length: 255 }),
+  hookSuggestion: text("hookSuggestion"),
+  score: int("score").default(0).notNull(),
+  source: varchar("source", { length: 80 }).default("ai_generator").notNull(),
+  status: mysqlEnum("status", ["generated", "approved", "rejected", "queued"]).default("generated").notNull(),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TopicCandidate = typeof topicCandidates.$inferSelect;
+export type InsertTopicCandidate = typeof topicCandidates.$inferInsert;
+
+/**
+ * Job idempotency - đảm bảo execution plane xử lý job idempotent
+ */
+export const jobIdempotencyKeys = mysqlTable("job_idempotency_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 255 }).notNull().unique(),
+  workerType: varchar("workerType", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["processing", "completed", "failed"]).default("processing").notNull(),
+  payloadHash: varchar("payloadHash", { length: 255 }),
+  lastError: text("lastError"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type JobIdempotencyKey = typeof jobIdempotencyKeys.$inferSelect;
+export type InsertJobIdempotencyKey = typeof jobIdempotencyKeys.$inferInsert;

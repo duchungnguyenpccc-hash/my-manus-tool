@@ -24,6 +24,7 @@ import { autoOptimizationRouter } from "./routers/autoOptimizationRouter";
 import { apiProviderRouter } from "./routers/apiProviderRouter";
 import { nicheManagementRouter } from "./routers/nicheManagementRouter";
 import { trendResearchRouter } from "./routers/trendResearchRouter";
+import { controlPlaneRouter } from "./routers/controlPlaneRouter";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -90,6 +91,7 @@ export const appRouter = router({
   apiProvider: apiProviderRouter,
   niche: nicheManagementRouter,
   trendResearch: trendResearchRouter,
+  controlPlane: controlPlaneRouter,
 });
 
 export type AppRouter = typeof appRouter;

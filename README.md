@@ -575,3 +575,13 @@ npm run dev
 ```
 
 `npm run dev` sẽ build frontend vào `server/_core/public`, khởi chạy backend và workflow worker.
+
+
+## 🏗️ Kiến trúc 4 lớp (Production Factory)
+
+- **Control Plane**: Campaign Manager, Niche Manager, Topic AI Generator, Content Strategy Engine.
+- **Execution Plane**: Durable queue + worker runtime + worker pool + retry/idempotency.
+- **Data Plane**: MySQL/TiDB + Redis cache + S3 object storage.
+- **Feedback Plane**: YouTube analytics feedback loop để tối ưu topic/niche.
+
+Tài liệu chi tiết: `FACTORY_ARCHITECTURE_V2_VN.md`.
