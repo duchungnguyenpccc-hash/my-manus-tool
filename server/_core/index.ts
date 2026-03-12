@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { getDb } from "../db";
 import { createContext } from "./context";
+import { ENV } from "./env";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrapWorkflowWorker } from "../workers/workflowWorker";
 
@@ -47,7 +48,13 @@ async function startServer() {
     });
   });
   // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
+  if (ENV.localDevMode) {
+    app.get("/api/oauth/callback", (_req, res) => {
+      res.redirect(302, "/dashboard");
+    });
+  } else {
+    registerOAuthRoutes(app);
+  }
   // tRPC API
   app.use(
     "/api/trpc",

@@ -1,5 +1,5 @@
 import { getDb } from "../db";
-import { workflowTasks, videoProjects } from "../../drizzle/schema";
+import { workflowTasks, videoProjects, niches } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { getApiKey } from "../utils/apiKeyDb";
 import { executeParallel, type ParallelTask } from "./parallelExecutor";
@@ -9,6 +9,8 @@ import { textToSpeech } from "./elevenLabsService";
 import { renderVideo } from "./creatomateService";
 import { uploadVideo } from "./youtubeService";
 import { withRetry } from "./resilience";
+import { scriptVersioningService } from "./scriptVersioningService";
+import { optimizeYoutubeMetadata } from "./metadataOptimizationService";
 
 /**
  * Improved Workflow Orchestrator
@@ -102,6 +104,27 @@ export async function executeCompleteWorkflow(
         { operationName: "generateVideoScript", timeoutMs: 120000, maxAttempts: 3 }
       );
       if (!scriptResult) throw new Error("Failed to generate script");
+
+      const projectRow = await db
+        .select()
+        .from(videoProjects)
+        .where(eq(videoProjects.id, projectId))
+        .limit(1);
+      const cfg = (projectRow[0]?.config ?? {}) as Record<string, unknown>;
+      const nicheId = Number(cfg.nicheId ?? 0) || null;
+      await scriptVersioningService.createVersion({
+        projectId,
+        userId,
+        nicheId,
+        versionLabel: "auto-v1",
+        prompt: config.topic,
+        content: JSON.stringify(scriptResult),
+        metadata: {
+          sceneCount: config.sceneCount,
+          duration: config.duration,
+        },
+      });
+
       await completeWorkflowTask(scriptTaskId, { scenes: scriptResult.scenes?.length ?? 0 });
     } catch (error) {
       await failWorkflowTask(scriptTaskId, error);
@@ -222,12 +245,27 @@ export async function executeCompleteWorkflow(
     await completeWorkflowTask(renderTaskId, { url: finalVideoUrl });
 
     const uploadTaskId = await createWorkflowTask(projectId, "upload", { step: "upload_youtube" });
+    const projectForMeta = (await db.select().from(videoProjects).where(eq(videoProjects.id, projectId)).limit(1))[0];
+    const projectCfg = (projectForMeta?.config ?? {}) as Record<string, unknown>;
+    const nicheId = Number(projectCfg.nicheId ?? 0) || null;
+    const nicheRow = nicheId
+      ? (await db.select().from(niches).where(eq(niches.id, nicheId)).limit(1))[0]
+      : null;
+
+    const metadata = optimizeYoutubeMetadata({
+      topic: config.topic,
+      nicheName: nicheRow?.nicheName,
+      scriptTitle: scriptResult.title,
+      scriptDescription: scriptResult.description,
+      tags: (scriptResult as any).tags || [],
+    });
+
     const youtubeResult = await withRetry(
       () =>
         uploadVideo(String(userId), String(projectId), {
-          title: scriptResult.title,
-          description: scriptResult.description,
-          tags: (scriptResult as any).tags || [],
+          title: metadata.title,
+          description: metadata.description,
+          tags: metadata.tags,
           privacyStatus: "public",
         }),
       { operationName: "uploadVideo", timeoutMs: 600000, maxAttempts: 2 }
