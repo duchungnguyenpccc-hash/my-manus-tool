@@ -63,6 +63,17 @@ Completion & Analytics
 
 ## 📦 Installation
 
+## ⚡ Quick local setup (under 5 minutes)
+```bash
+git clone <your-repo-url>
+cd faceless-pov-ai-machine
+./scripts/setup-local.sh
+pnpm dev
+```
+
+Then open `http://localhost:3000` and verify health at `http://localhost:3000/api/health`.
+
+
 ### Prerequisites
 - Node.js 22+
 - pnpm package manager
@@ -79,20 +90,32 @@ pnpm install
 
 2. **Configure environment variables**
 ```bash
-# Create .env file with your API keys
+# Core
+DATABASE_URL=mysql://...
+JWT_SECRET=replace-with-secure-secret
+VITE_APP_ID=local-dev-app
+
+# OAuth (local fallback supported, but should be set explicitly for real auth)
+OAUTH_SERVER_URL=http://localhost:3000
+VITE_OAUTH_PORTAL_URL=http://localhost:3000
+
+# Analytics (optional for local; if omitted, analytics script is disabled)
+VITE_ANALYTICS_ENDPOINT=
+VITE_ANALYTICS_WEBSITE_ID=local-dev
+
+# Providers
 OPENAI_API_KEY=sk-...
 PIAPI_API_KEY=pi_...
 ELEVENLABS_API_KEY=sk_...
 CREATOMATE_API_KEY=ct_...
 YOUTUBE_CLIENT_ID=...
 YOUTUBE_CLIENT_SECRET=...
-DATABASE_URL=mysql://...
 ```
 
-3. **Setup database**
+3. **Setup database migrations**
 ```bash
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+# Applies current schema (including niche/topic/workflow durable queue tables)
+pnpm db:push
 ```
 
 4. **Start development server**
@@ -462,3 +485,34 @@ Built with:
 ---
 
 **Created with ❤️ by the Faceless POV AI Machine team**
+
+
+### Local development notes
+- App now validates URL-like env vars before use to avoid runtime errors such as `TypeError: Invalid URL`.
+- If `VITE_ANALYTICS_ENDPOINT` is empty or invalid, analytics script injection is skipped in local mode.
+- Frontend build output is configured to `server/_core/public` so backend can directly serve static build in production mode.
+
+### Run locally
+```bash
+pnpm install
+pnpm -s tsc --noEmit
+pnpm dev
+```
+
+### Build and serve with backend static files
+```bash
+pnpm -s vite build
+NODE_ENV=production pnpm dev
+```
+
+
+### Local setup script
+Use the script below to bootstrap local development quickly:
+```bash
+./scripts/setup-local.sh
+```
+
+### Health check
+```bash
+curl http://localhost:3000/api/health
+```

@@ -5,7 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
-import { getLoginUrl } from "./const";
+import { getAnalyticsConfig, getLoginUrl } from "./const";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -36,6 +36,28 @@ queryClient.getMutationCache().subscribe(event => {
     console.error("[API Mutation Error]", error);
   }
 });
+
+
+const setupAnalyticsScript = () => {
+  if (typeof window === "undefined") return;
+
+  const analytics = getAnalyticsConfig();
+  if (!analytics.enabled) {
+    return;
+  }
+
+  const existing = document.querySelector('script[data-analytics="umami"]');
+  if (existing) return;
+
+  const script = document.createElement("script");
+  script.defer = true;
+  script.dataset.analytics = "umami";
+  script.src = `${analytics.endpoint}/umami`;
+  script.setAttribute("data-website-id", analytics.websiteId);
+  document.head.appendChild(script);
+};
+
+setupAnalyticsScript();
 
 const trpcClient = trpc.createClient({
   links: [

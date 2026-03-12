@@ -5,6 +5,7 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
+import { getDb } from "../db";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrapWorkflowWorker } from "../workers/workflowWorker";
@@ -34,6 +35,17 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.get("/api/health", async (_req, res) => {
+    const db = await getDb();
+    const startedAt = process.uptime();
+    res.status(200).json({
+      status: "ok",
+      service: "faceless-pov-ai-machine",
+      uptimeSeconds: Math.round(startedAt),
+      database: db ? "connected" : "unavailable",
+      timestamp: new Date().toISOString(),
+    });
+  });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API
