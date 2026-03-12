@@ -38,7 +38,6 @@ function Router() {
       <Route path="/auto-optimization" component={AutoOptimizationDashboard} />
       <Route path="/api-providers" component={APIProviderSettings} />
       <Route path="/niches" component={Niches} />
-      <Route path="/settings" component={Settings} />
       <Route path={"/project/:id"} component={ProjectDetails} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
