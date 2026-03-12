@@ -9,4 +9,10 @@ export const ENV = {
   localDevMode: process.env.NODE_ENV === "development" || process.env.LOCAL_DEV_MODE === "true",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  redisUrl: process.env.REDIS_URL ?? "",
+  s3Endpoint: process.env.S3_ENDPOINT ?? "",
+  s3Region: process.env.S3_REGION ?? "auto",
+  s3Bucket: process.env.S3_BUCKET ?? "",
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
 };
