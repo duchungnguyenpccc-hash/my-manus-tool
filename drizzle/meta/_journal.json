@@ -15,6 +15,13 @@
       "when": 1773135884387,
       "tag": "0001_clean_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773291153183,
+      "tag": "0002_durable_queue_and_niche_topic",
+      "breakpoints": true
     }
   ]
 }

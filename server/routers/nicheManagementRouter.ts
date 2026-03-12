@@ -130,4 +130,32 @@ export const nicheManagementRouter = router({
     .query(async ({ input }) => {
       return nicheManagementService.getNicheAudience(input.nicheId);
     }),
+
+  // Enqueue topic for niche
+  enqueueTopic: protectedProcedure
+    .input(
+      z.object({
+        nicheId: z.number(),
+        topic: z.string().min(5),
+        priority: z.number().int().optional().default(100),
+        source: z.string().optional().default("manual"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return nicheManagementService.enqueueTopic(
+        ctx.user.id,
+        input.nicheId,
+        input.topic,
+        input.priority,
+        input.source
+      );
+    }),
+
+  // List topic queue for niche
+  getTopicQueue: protectedProcedure
+    .input(z.object({ nicheId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return nicheManagementService.listTopicQueue(ctx.user.id, input.nicheId);
+    }),
+
 });

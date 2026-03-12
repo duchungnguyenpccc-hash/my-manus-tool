@@ -25,6 +25,73 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+
+/**
+ * Niches table - manage multiple content niches per user
+ */
+export const niches = mysqlTable("niches", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  nicheName: varchar("nicheName", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 120 }),
+  targetAudience: json("targetAudience"),
+  performanceTargets: json("performanceTargets"),
+  monetizationStrategy: json("monetizationStrategy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Niche = typeof niches.$inferSelect;
+export type InsertNiche = typeof niches.$inferInsert;
+
+/**
+ * Topic queue table - niche scoped topics waiting for execution
+ */
+export const nicheTopicQueue = mysqlTable("niche_topic_queue", {
+  id: int("id").autoincrement().primaryKey(),
+  nicheId: int("nicheId").notNull(),
+  userId: int("userId").notNull(),
+  topic: text("topic").notNull(),
+  priority: int("priority").default(100).notNull(),
+  status: mysqlEnum("status", ["queued", "claimed", "completed", "failed", "cancelled"]).default("queued").notNull(),
+  source: varchar("source", { length: 80 }).default("manual").notNull(),
+  projectId: int("projectId"),
+  availableAt: timestamp("availableAt").defaultNow().notNull(),
+  claimedAt: timestamp("claimedAt"),
+  completedAt: timestamp("completedAt"),
+  error: text("error"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NicheTopicQueue = typeof nicheTopicQueue.$inferSelect;
+export type InsertNicheTopicQueue = typeof nicheTopicQueue.$inferInsert;
+
+/**
+ * Workflow jobs table - durable queue for workflow workers
+ */
+export const workflowJobs = mysqlTable("workflow_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId").notNull(),
+  nicheId: int("nicheId"),
+  topicQueueId: int("topicQueueId"),
+  payload: json("payload").notNull(),
+  status: mysqlEnum("status", ["queued", "processing", "completed", "failed", "cancelled"]).default("queued").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("maxAttempts").default(3).notNull(),
+  availableAt: timestamp("availableAt").defaultNow().notNull(),
+  lockedAt: timestamp("lockedAt"),
+  completedAt: timestamp("completedAt"),
+  error: text("error"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type WorkflowJob = typeof workflowJobs.$inferSelect;
+export type InsertWorkflowJob = typeof workflowJobs.$inferInsert;
+
 /**
  * API Keys table - stores encrypted API credentials for external services
  */
