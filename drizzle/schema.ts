@@ -190,3 +190,45 @@ export const youtubeUploads = mysqlTable("youtube_uploads", {
 
 export type YoutubeUpload = typeof youtubeUploads.$inferSelect;
 export type InsertYoutubeUpload = typeof youtubeUploads.$inferInsert;
+
+/**
+ * Script versions - lưu phiên bản script theo project để A/B testing
+ */
+export const scriptVersions = mysqlTable("script_versions", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  userId: int("userId").notNull(),
+  nicheId: int("nicheId"),
+  versionNumber: int("versionNumber").notNull(),
+  versionLabel: varchar("versionLabel", { length: 64 }).notNull(),
+  prompt: text("prompt").notNull(),
+  content: text("content").notNull(),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScriptVersion = typeof scriptVersions.$inferSelect;
+export type InsertScriptVersion = typeof scriptVersions.$inferInsert;
+
+/**
+ * Analytics feedback - lưu snapshot metrics để tối ưu vòng lặp nội dung
+ */
+export const analyticsFeedback = mysqlTable("analytics_feedback", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId").notNull(),
+  nicheId: int("nicheId"),
+  youtubeVideoId: varchar("youtubeVideoId", { length: 255 }).notNull(),
+  views: bigint("views", { mode: "number" }).default(0).notNull(),
+  watchTimeMinutes: bigint("watchTimeMinutes", { mode: "number" }).default(0).notNull(),
+  ctr: int("ctr").default(0).notNull(),
+  engagementRate: int("engagementRate").default(0).notNull(),
+  likes: bigint("likes", { mode: "number" }).default(0).notNull(),
+  comments: bigint("comments", { mode: "number" }).default(0).notNull(),
+  shares: bigint("shares", { mode: "number" }).default(0).notNull(),
+  rawMetrics: json("rawMetrics"),
+  capturedAt: timestamp("capturedAt").defaultNow().notNull(),
+});
+
+export type AnalyticsFeedback = typeof analyticsFeedback.$inferSelect;
+export type InsertAnalyticsFeedback = typeof analyticsFeedback.$inferInsert;

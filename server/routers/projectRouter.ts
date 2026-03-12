@@ -4,6 +4,7 @@ import { getDb } from "../db";
 import { nicheTopicQueue, videoProjects, workflowTasks } from "../../drizzle/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "../services/workflowDispatchService";
+import { scriptVersioningService } from "../services/scriptVersioningService";
 
 async function createProjectAndQueue(params: {
   userId: number;
@@ -145,6 +146,55 @@ export const projectRouter = router({
       });
     }),
 
+
+  autoCreateFromQueue: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().int().min(1).max(50).default(5),
+        nicheId: z.number().optional(),
+        sceneCount: z.number().int().min(1).max(20).default(5),
+        videoDuration: z.number().int().min(30).max(600).default(60),
+        voicePreset: z.string().default("alloy"),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+
+      const allQueued = await db
+        .select()
+        .from(nicheTopicQueue)
+        .where(and(eq(nicheTopicQueue.userId, ctx.user.id), eq(nicheTopicQueue.status, "queued")))
+        .orderBy(asc(nicheTopicQueue.priority), asc(nicheTopicQueue.createdAt));
+
+      const filtered = input.nicheId
+        ? allQueued.filter((q) => q.nicheId === input.nicheId)
+        : allQueued;
+
+      const rows = filtered.slice(0, input.limit);
+      const created = [] as Array<{ topicQueueId: number; projectId: number; jobId: number }>;
+      for (const row of rows) {
+        const result = await createProjectAndQueue({
+          userId: ctx.user.id,
+          topic: row.topic,
+          sceneCount: input.sceneCount,
+          videoDuration: input.videoDuration,
+          voicePreset: input.voicePreset,
+          autoPublish: false,
+          nicheId: row.nicheId,
+          topicQueueId: row.id,
+        });
+
+        created.push({ topicQueueId: row.id, projectId: result.projectId, jobId: result.jobId });
+      }
+
+      return {
+        success: true,
+        createdCount: created.length,
+        created,
+      };
+    }),
+
   getById: protectedProcedure.input(z.object({ projectId: z.number() })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -193,6 +243,12 @@ export const projectRouter = router({
       })),
     };
   }),
+
+  getScriptVersions: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      return scriptVersioningService.listByProject(input.projectId, ctx.user.id);
+    }),
 
   delete: protectedProcedure.input(z.object({ projectId: z.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();

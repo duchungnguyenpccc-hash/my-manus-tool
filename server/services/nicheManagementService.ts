@@ -162,4 +162,36 @@ export const nicheManagementService = {
       .where(and(eq(nicheTopicQueue.userId, userId), eq(nicheTopicQueue.nicheId, nicheId)))
       .orderBy(asc(nicheTopicQueue.priority), asc(nicheTopicQueue.createdAt));
   },
+
+  async updateTopicPriority(userId: number, topicQueueId: number, priority: number) {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    await db
+      .update(nicheTopicQueue)
+      .set({ priority, updatedAt: new Date() })
+      .where(and(eq(nicheTopicQueue.id, topicQueueId), eq(nicheTopicQueue.userId, userId)));
+
+    return { success: true };
+  },
+
+  async updateTopicStatus(
+    userId: number,
+    topicQueueId: number,
+    status: "queued" | "claimed" | "completed" | "failed" | "cancelled"
+  ) {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+
+    await db
+      .update(nicheTopicQueue)
+      .set({
+        status,
+        updatedAt: new Date(),
+        completedAt: status === "completed" || status === "cancelled" ? new Date() : null,
+      })
+      .where(and(eq(nicheTopicQueue.id, topicQueueId), eq(nicheTopicQueue.userId, userId)));
+
+    return { success: true };
+  },
 };

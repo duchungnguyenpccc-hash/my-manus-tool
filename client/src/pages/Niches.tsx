@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Edit2, ListTodo, Play, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Edit2, ListTodo, Play, ChevronDown, ChevronUp, Check, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -84,6 +84,46 @@ export function Niches() {
       toast.success(`Đã tạo project #${result.projectId} từ topic queue`);
     },
     onError: (error) => toast.error(error.message || "Tạo project từ queue thất bại"),
+  });
+
+  const prioritizeTopicMutation = trpc.niche.prioritizeTopic.useMutation({
+    onSuccess: async () => {
+      await topicQueueQuery.refetch();
+      toast.success("Đã cập nhật priority topic");
+    },
+    onError: (error) => toast.error(error.message || "Cập nhật priority thất bại"),
+  });
+
+  const approveTopicMutation = trpc.niche.approveTopic.useMutation({
+    onSuccess: async () => {
+      await topicQueueQuery.refetch();
+      toast.success("Đã duyệt topic");
+    },
+    onError: (error) => toast.error(error.message || "Duyệt topic thất bại"),
+  });
+
+  const rejectTopicMutation = trpc.niche.rejectTopic.useMutation({
+    onSuccess: async () => {
+      await topicQueueQuery.refetch();
+      toast.success("Đã từ chối topic");
+    },
+    onError: (error) => toast.error(error.message || "Từ chối topic thất bại"),
+  });
+
+  const autoGenerateTopicsMutation = trpc.niche.autoGenerateTopics.useMutation({
+    onSuccess: async (result) => {
+      await Promise.all([utils.niche.list.invalidate(), topicQueueQuery.refetch()]);
+      toast.success(`Đã tạo ${result.inserted} topics tự động`);
+    },
+    onError: (error) => toast.error(error.message || "Auto-generate topics thất bại"),
+  });
+
+  const autoCreateProjectsMutation = trpc.project.autoCreateFromQueue.useMutation({
+    onSuccess: async (result) => {
+      await Promise.all([utils.project.list.invalidate(), utils.project.getStats.invalidate(), utils.niche.list.invalidate(), topicQueueQuery.refetch()]);
+      toast.success(`Đã tạo tự động ${result.createdCount} project từ queue`);
+    },
+    onError: (error) => toast.error(error.message || "Auto-create projects thất bại"),
   });
 
   const filteredNiches = useMemo(
@@ -282,6 +322,24 @@ export function Niches() {
                       >
                         <Play className="h-4 w-4" />
                         Tạo Project từ Queue
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => autoGenerateTopicsMutation.mutate({ nicheId: niche.id, limit: 10 })}
+                        disabled={autoGenerateTopicsMutation.isPending}
+                      >
+                        Auto-generate Topics
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => autoCreateProjectsMutation.mutate({ nicheId: niche.id, limit: 3 })}
+                        disabled={autoCreateProjectsMutation.isPending}
+                      >
+                        Auto-create Projects
                       </Button>
                     </div>
 

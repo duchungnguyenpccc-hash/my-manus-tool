@@ -68,7 +68,7 @@ Completion & Analytics
 git clone <your-repo-url>
 cd faceless-pov-ai-machine
 ./scripts/setup-local.sh
-pnpm dev
+npm run dev
 ```
 
 Then open `http://localhost:3000` and verify health at `http://localhost:3000/api/health`.
@@ -120,10 +120,45 @@ pnpm db:push
 
 4. **Start development server**
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Visit `http://localhost:3000` to access the application.
+
+
+## 🧪 Chạy local không cần OAuth (Development Mode)
+
+1. Clone repository
+```bash
+git clone https://github.com/duchungnguyenpccc-hash/my-manus-tool.git
+cd my-manus-tool
+```
+
+2. Cài dependencies
+```bash
+npm install
+```
+
+3. Tạo file môi trường
+```bash
+cp .env.example .env
+```
+
+4. Build frontend vào `server/_core/public`
+```bash
+npm run build:client
+```
+
+5. Chạy local full stack (mock auth + backend + workflow worker)
+```bash
+npm run dev:local
+```
+
+Sau khi chạy thành công:
+- App: `http://localhost:3000/dashboard`
+- Health check: `http://localhost:3000/api/health`
+
+> Ở chế độ development (`NODE_ENV=development`), OAuth sẽ được bỏ qua và hệ thống tự tạo mock session để có thể test toàn bộ UI/feature nhanh.
 
 ## 📚 API Documentation
 
@@ -496,13 +531,13 @@ Built with:
 ```bash
 pnpm install
 pnpm -s tsc --noEmit
-pnpm dev
+npm run dev
 ```
 
 ### Build and serve with backend static files
 ```bash
 pnpm -s vite build
-NODE_ENV=production pnpm dev
+NODE_ENV=production npm run dev
 ```
 
 
@@ -516,3 +551,27 @@ Use the script below to bootstrap local development quickly:
 ```bash
 curl http://localhost:3000/api/health
 ```
+
+
+## 🏭 AI YouTube Automation Factory Modules
+
+Hệ thống hiện chạy theo pipeline tự động:
+
+Trend Research → Topic Queue → Project Creation → Script → Media → Render → Upload → Analytics Feedback
+
+### Module mới
+- `trendResearchEngineService`: phân tích trend + sinh topic ideas theo niche và đẩy vào queue.
+- `scriptVersioningService`: lưu version script theo project để A/B test và audit.
+- `metadataOptimizationService`: tối ưu title/description/tags trước khi upload YouTube.
+- `analyticsFeedbackService`: lưu snapshots analytics (views, watch time, CTR, engagement) để đóng vòng lặp tối ưu nội dung.
+
+### Lệnh chạy local nhanh
+```bash
+git clone https://github.com/duchungnguyenpccc-hash/my-manus-tool.git
+cd my-manus-tool
+npm install
+cp .env.example .env
+npm run dev
+```
+
+`npm run dev` sẽ build frontend vào `server/_core/public`, khởi chạy backend và workflow worker.

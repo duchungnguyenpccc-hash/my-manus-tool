@@ -1,5 +1,9 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
+export const isLocalDevelopmentMode =
+  (import.meta.env.MODE === "development" && import.meta.env.DEV) ||
+  (import.meta.env.VITE_LOCAL_DEV_MODE as string | undefined) === "true";
+
 const isValidAbsoluteUrl = (value: string): boolean => {
   try {
     const parsed = new URL(value);
@@ -12,6 +16,10 @@ const isValidAbsoluteUrl = (value: string): boolean => {
 const normalizeUrl = (value: string): string => value.replace(/\/+$/, "");
 
 export const getOAuthPortalUrl = (): string => {
+  if (isLocalDevelopmentMode) {
+    return normalizeUrl(window.location.origin);
+  }
+
   const raw = (import.meta.env.VITE_OAUTH_PORTAL_URL as string | undefined)?.trim() || "";
   if (isValidAbsoluteUrl(raw)) {
     return normalizeUrl(raw);
@@ -22,6 +30,10 @@ export const getOAuthPortalUrl = (): string => {
 
 // Generate login URL at runtime so redirect URI reflects the current origin.
 export const getLoginUrl = () => {
+  if (isLocalDevelopmentMode) {
+    return "/dashboard";
+  }
+
   const oauthPortalUrl = getOAuthPortalUrl();
   const appId = ((import.meta.env.VITE_APP_ID as string | undefined)?.trim() || "local-dev-app");
   const redirectUri = `${window.location.origin}/api/oauth/callback`;

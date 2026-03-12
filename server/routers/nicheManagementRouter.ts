@@ -1,6 +1,7 @@
 import { router, protectedProcedure } from "../_core/trpc";
 import { z } from "zod";
 import { nicheManagementService } from "../services/nicheManagementService";
+import { trendResearchEngineService } from "../services/trendResearchEngineService";
 
 export const nicheManagementRouter = router({
   // Create niche
@@ -156,6 +157,32 @@ export const nicheManagementRouter = router({
     .input(z.object({ nicheId: z.number() }))
     .query(async ({ ctx, input }) => {
       return nicheManagementService.listTopicQueue(ctx.user.id, input.nicheId);
+    }),
+
+  prioritizeTopic: protectedProcedure
+    .input(z.object({ topicQueueId: z.number(), priority: z.number().int().min(1).max(999) }))
+    .mutation(async ({ ctx, input }) => {
+      return nicheManagementService.updateTopicPriority(ctx.user.id, input.topicQueueId, input.priority);
+    }),
+
+  approveTopic: protectedProcedure
+    .input(z.object({ topicQueueId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      return nicheManagementService.updateTopicStatus(ctx.user.id, input.topicQueueId, "queued");
+    }),
+
+  rejectTopic: protectedProcedure
+    .input(z.object({ topicQueueId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      return nicheManagementService.updateTopicStatus(ctx.user.id, input.topicQueueId, "cancelled");
+    }),
+
+  autoGenerateTopics: protectedProcedure
+    .input(z.object({ nicheId: z.number(), limit: z.number().int().min(1).max(50).default(10) }))
+    .mutation(async ({ ctx, input }) => {
+      const ideas = await trendResearchEngineService.generateTopicIdeasForNiche(input.nicheId, ctx.user.id, input.limit);
+      const pushed = await trendResearchEngineService.pushIdeasToNicheQueue(input.nicheId, ctx.user.id, ideas);
+      return { ...pushed, ideas };
     }),
 
 });
