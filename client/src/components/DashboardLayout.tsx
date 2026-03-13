@@ -31,6 +31,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Layers, label: "Niches", path: "/niches" },
   { icon: TrendingUp, label: "Trend Research", path: "/trends" },
+  { icon: TrendingUp, label: "Topic Analyzer", path: "/topic-analyzer" },
   { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: BarChart3, label: "Advanced Analytics", path: "/advanced-analytics" },
   { icon: Zap, label: "Auto-Optimization", path: "/auto-optimization" },

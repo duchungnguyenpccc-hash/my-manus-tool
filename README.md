@@ -63,6 +63,17 @@ Completion & Analytics
 
 ## 📦 Installation
 
+## ⚡ Quick local setup (under 5 minutes)
+```bash
+git clone <your-repo-url>
+cd faceless-pov-ai-machine
+./scripts/setup-local.sh
+npm run dev
+```
+
+Then open `http://localhost:3000` and verify health at `http://localhost:3000/api/health`.
+
+
 ### Prerequisites
 - Node.js 22+
 - pnpm package manager
@@ -79,28 +90,75 @@ pnpm install
 
 2. **Configure environment variables**
 ```bash
-# Create .env file with your API keys
+# Core
+DATABASE_URL=mysql://...
+JWT_SECRET=replace-with-secure-secret
+VITE_APP_ID=local-dev-app
+
+# OAuth (local fallback supported, but should be set explicitly for real auth)
+OAUTH_SERVER_URL=http://localhost:3000
+VITE_OAUTH_PORTAL_URL=http://localhost:3000
+
+# Analytics (optional for local; if omitted, analytics script is disabled)
+VITE_ANALYTICS_ENDPOINT=
+VITE_ANALYTICS_WEBSITE_ID=local-dev
+
+# Providers
 OPENAI_API_KEY=sk-...
 PIAPI_API_KEY=pi_...
 ELEVENLABS_API_KEY=sk_...
 CREATOMATE_API_KEY=ct_...
 YOUTUBE_CLIENT_ID=...
 YOUTUBE_CLIENT_SECRET=...
-DATABASE_URL=mysql://...
 ```
 
-3. **Setup database**
+3. **Setup database migrations**
 ```bash
-pnpm drizzle-kit generate
-pnpm drizzle-kit migrate
+# Applies current schema (including niche/topic/workflow durable queue tables)
+pnpm db:push
 ```
 
 4. **Start development server**
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Visit `http://localhost:3000` to access the application.
+
+
+## 🧪 Chạy local không cần OAuth (Development Mode)
+
+1. Clone repository
+```bash
+git clone https://github.com/duchungnguyenpccc-hash/my-manus-tool.git
+cd my-manus-tool
+```
+
+2. Cài dependencies
+```bash
+npm install
+```
+
+3. Tạo file môi trường
+```bash
+cp .env.example .env
+```
+
+4. Build frontend vào `server/_core/public`
+```bash
+npm run build:client
+```
+
+5. Chạy local full stack (mock auth + backend + workflow worker)
+```bash
+npm run dev:local
+```
+
+Sau khi chạy thành công:
+- App: `http://localhost:3000/dashboard`
+- Health check: `http://localhost:3000/api/health`
+
+> Ở chế độ development (`NODE_ENV=development`), OAuth sẽ được bỏ qua và hệ thống tự tạo mock session để có thể test toàn bộ UI/feature nhanh.
 
 ## 📚 API Documentation
 
@@ -462,3 +520,109 @@ Built with:
 ---
 
 **Created with ❤️ by the Faceless POV AI Machine team**
+
+
+### Local development notes
+- App now validates URL-like env vars before use to avoid runtime errors such as `TypeError: Invalid URL`.
+- If `VITE_ANALYTICS_ENDPOINT` is empty or invalid, analytics script injection is skipped in local mode.
+- Frontend build output is configured to `server/_core/public` so backend can directly serve static build in production mode.
+
+### Run locally
+```bash
+pnpm install
+pnpm -s tsc --noEmit
+npm run dev
+```
+
+### Build and serve with backend static files
+```bash
+pnpm -s vite build
+NODE_ENV=production npm run dev
+```
+
+
+### Local setup script
+Use the script below to bootstrap local development quickly:
+```bash
+./scripts/setup-local.sh
+```
+
+### Health check
+```bash
+curl http://localhost:3000/api/health
+```
+
+
+## 🏭 AI YouTube Automation Factory Modules
+
+Hệ thống hiện chạy theo pipeline tự động:
+
+Trend Research → Topic Queue → Project Creation → Script → Media → Render → Upload → Analytics Feedback
+
+### Module mới
+- `trendResearchEngineService`: phân tích trend + sinh topic ideas theo niche và đẩy vào queue.
+- `scriptVersioningService`: lưu version script theo project để A/B test và audit.
+- `metadataOptimizationService`: tối ưu title/description/tags trước khi upload YouTube.
+- `analyticsFeedbackService`: lưu snapshots analytics (views, watch time, CTR, engagement) để đóng vòng lặp tối ưu nội dung.
+
+### Lệnh chạy local nhanh
+```bash
+git clone https://github.com/duchungnguyenpccc-hash/my-manus-tool.git
+cd my-manus-tool
+npm install
+cp .env.example .env
+npm run dev
+```
+
+`npm run dev` sẽ build frontend vào `server/_core/public`, khởi chạy backend và workflow worker.
+
+
+## 🏗️ Kiến trúc 4 lớp (Production Factory)
+
+- **Control Plane**: Campaign Manager, Niche Manager, Topic AI Generator, Content Strategy Engine.
+- **Execution Plane**: Durable queue + worker runtime + worker pool + retry/idempotency.
+- **Data Plane**: MySQL/TiDB + Redis cache + S3 object storage.
+- **Feedback Plane**: YouTube analytics feedback loop để tối ưu topic/niche.
+
+Tài liệu chi tiết: `FACTORY_ARCHITECTURE_V2_VN.md`.
+
+
+## 🔀 Hybrid Provider Architecture
+
+Hệ thống hỗ trợ chạy **cloud** hoặc **local** cho từng stage mà không đổi pipeline:
+- Script: OpenAI / Ollama
+- Image: Midjourney-like cloud adapter / Stable Diffusion local
+- Voice: ElevenLabs / Coqui TTS
+- Render: Creatomate / FFmpeg local
+
+Cấu hình provider được lưu trong bảng `provider_configurations` và được Provider Manager chọn động theo user settings.
+
+### Local AI Setup Wizard
+Vào trang **API Providers** để:
+- kiểm tra local tools (Ollama, Stable Diffusion, FFmpeg, Whisper, Coqui TTS)
+- copy lệnh cài đặt nhanh cho tool còn thiếu
+
+### Môi trường local providers
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+STABLE_DIFFUSION_URL=http://127.0.0.1:7860
+COQUI_TTS_URL=http://127.0.0.1:5002
+```
+
+
+## 📈 YouTube Algorithm Simulator
+
+Hệ thống có module mô phỏng thuật toán YouTube để chấm điểm viral trước sản xuất:
+- Title CTR predictor (emotional triggers + curiosity gap + keyword strength)
+- Retention predictor (hook + structure + novelty)
+- Demand predictor (YouTube suggestions + Google trends)
+- Competition predictor (video cạnh tranh + avg views)
+- Viral score calculator (0-100)
+
+### Production Gate
+Chỉ topic có `viralScore >= VIRAL_SCORE_THRESHOLD` mới được phép vào production pipeline (`project.create`, `createFromNicheQueue`, `autoCreateFromQueue`).
+
+Có thể cấu hình ngưỡng tại `.env`:
+```bash
+VIRAL_SCORE_THRESHOLD=65
+```

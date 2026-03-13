@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { AlertCircle, Check, DollarSign, Zap, Download } from "lucide-react";
+import { toast } from "sonner";
 
 export function APIProviderSettings() {
   const [selectedProviders, setSelectedProviders] = useState<Record<string, string>>({});
@@ -23,6 +24,27 @@ export function APIProviderSettings() {
     { enabled: Object.keys(selectedProviders).length > 0 }
   );
   const { data: scenarios } = trpc.apiProvider.estimateScenarios.useQuery();
+  const utils = trpc.useUtils();
+
+  const { data: providerCatalog } = trpc.hybridProvider.catalog.useQuery();
+  const { data: providerConfigs } = trpc.hybridProvider.getConfigs.useQuery();
+  const { data: localTools, refetch: refetchLocalTools } = trpc.hybridProvider.detectLocalTools.useQuery();
+
+  const upsertProviderConfigMutation = trpc.hybridProvider.upsertConfig.useMutation({
+    onSuccess: async () => {
+      await utils.hybridProvider.getConfigs.invalidate();
+      toast.success("Đã lưu cấu hình provider");
+    },
+    onError: (error) => toast.error(error.message || "Lưu provider thất bại"),
+  });
+
+  const installToolInstructionMutation = trpc.hybridProvider.installToolInstructions.useMutation({
+    onSuccess: (result) => {
+      navigator.clipboard?.writeText(result.installCommand);
+      toast.success(`Đã copy lệnh cài ${result.toolId} vào clipboard`);
+    },
+    onError: (error) => toast.error(error.message || "Lấy lệnh cài thất bại"),
+  });
 
   const handleProviderSelect = (type: string, providerId: string) => {
     setSelectedProviders((prev) => ({
@@ -95,6 +117,85 @@ export function APIProviderSettings() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Hybrid Provider Manager</CardTitle>
+            <CardDescription>
+              Chọn provider cloud/local cho từng stage: script, image, voice, render.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(["script", "image", "voice", "render"] as const).map((category) => {
+              const options = (providerCatalog as any)?.[category] || [];
+              const active = (providerConfigs || []).find((c: any) => c.category === category && c.isActive);
+              return (
+                <div key={category} className="border rounded-lg p-3 space-y-2">
+                  <p className="font-medium capitalize">{category}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {options.map((opt: any) => {
+                      const isActive = active?.providerId === opt.id;
+                      return (
+                        <Button
+                          key={`${category}-${opt.id}`}
+                          variant={isActive ? "default" : "outline"}
+                          size="sm"
+                          onClick={() =>
+                            upsertProviderConfigMutation.mutate({
+                              category,
+                              providerId: opt.id,
+                              mode: opt.mode,
+                            })
+                          }
+                        >
+                          {opt.id} ({opt.mode})
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Local AI Setup Wizard</CardTitle>
+            <CardDescription>Cài Ollama, Stable Diffusion, FFmpeg, Whisper, Coqui TTS cho local-only mode.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => refetchLocalTools()}>
+                Kiểm tra local tools
+              </Button>
+            </div>
+
+            <div className="grid gap-2">
+              {(localTools || []).map((tool: any) => (
+                <div key={tool.id} className="border rounded-lg p-3 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{tool.id}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{tool.message}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={tool.installed ? "default" : "secondary"}>
+                      {tool.installed ? "Installed" : "Missing"}
+                    </Badge>
+                    {!tool.installed && (
+                      <Button
+                        size="sm"
+                        onClick={() => installToolInstructionMutation.mutate({ toolId: tool.id })}
+                      >
+                        Copy install cmd
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Preset Scenarios */}
         <Card>

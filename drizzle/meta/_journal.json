@@ -15,6 +15,34 @@
       "when": 1773135884387,
       "tag": "0001_clean_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773291153183,
+      "tag": "0002_durable_queue_and_niche_topic",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1773400000000,
+      "tag": "0003_factory_feedback_and_script_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1773500000000,
+      "tag": "0004_control_execution_plane_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1773600000000,
+      "tag": "0005_hybrid_provider_config",
+      "breakpoints": true
     }
   ]
 }

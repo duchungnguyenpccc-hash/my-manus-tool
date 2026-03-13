@@ -23,6 +23,10 @@ import { qualityControlRouter } from "./routers/qualityControlRouter";
 import { autoOptimizationRouter } from "./routers/autoOptimizationRouter";
 import { apiProviderRouter } from "./routers/apiProviderRouter";
 import { nicheManagementRouter } from "./routers/nicheManagementRouter";
+import { trendResearchRouter } from "./routers/trendResearchRouter";
+import { controlPlaneRouter } from "./routers/controlPlaneRouter";
+import { hybridProviderRouter } from "./routers/hybridProviderRouter";
+import { youtubeAlgorithmSimulatorRouter } from "./routers/youtubeAlgorithmSimulatorRouter";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -88,6 +92,10 @@ export const appRouter = router({
   autoOptimization: autoOptimizationRouter,
   apiProvider: apiProviderRouter,
   niche: nicheManagementRouter,
+  trendResearch: trendResearchRouter,
+  controlPlane: controlPlaneRouter,
+  hybridProvider: hybridProviderRouter,
+  algorithmSimulator: youtubeAlgorithmSimulatorRouter,
 });
 
 export type AppRouter = typeof appRouter;
