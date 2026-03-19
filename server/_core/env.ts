@@ -15,7 +15,4 @@ export const ENV = {
   s3Bucket: process.env.S3_BUCKET ?? "",
   s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
   s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
-  ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
-  stableDiffusionUrl: process.env.STABLE_DIFFUSION_URL ?? "http://127.0.0.1:7860",
-  coquiTtsUrl: process.env.COQUI_TTS_URL ?? "http://127.0.0.1:5002",
 };

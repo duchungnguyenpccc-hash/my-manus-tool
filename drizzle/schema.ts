@@ -287,21 +287,3 @@ export const jobIdempotencyKeys = mysqlTable("job_idempotency_keys", {
 
 export type JobIdempotencyKey = typeof jobIdempotencyKeys.$inferSelect;
 export type InsertJobIdempotencyKey = typeof jobIdempotencyKeys.$inferInsert;
-
-/**
- * Provider configurations - hỗ trợ hybrid cloud/local provider per user
- */
-export const providerConfigurations = mysqlTable("provider_configurations", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  category: mysqlEnum("category", ["script", "image", "voice", "render"]).notNull(),
-  mode: mysqlEnum("mode", ["cloud", "local"]).notNull(),
-  providerId: varchar("providerId", { length: 100 }).notNull(),
-  settings: json("settings"),
-  isActive: boolean("isActive").default(true).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-export type ProviderConfiguration = typeof providerConfigurations.$inferSelect;
-export type InsertProviderConfiguration = typeof providerConfigurations.$inferInsert;

@@ -5,19 +5,6 @@ import { nicheTopicQueue, videoProjects, workflowTasks } from "../../drizzle/sch
 import { eq, and, desc, asc } from "drizzle-orm";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "../services/workflowDispatchService";
 import { scriptVersioningService } from "../services/scriptVersioningService";
-import { simulateViralPotential } from "../services/youtubeAlgorithmSimulatorService";
-
-const VIRAL_THRESHOLD = Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65);
-
-async function assertViralGate(topic: string) {
-  const prediction = await simulateViralPotential({ topic, title: topic, threshold: VIRAL_THRESHOLD });
-  if (prediction.decision !== "allow") {
-    throw new Error(
-      `Video bị chặn: viral score ${prediction.viralScore}/100 thấp hơn ngưỡng ${prediction.threshold}/100`
-    );
-  }
-  return prediction;
-}
 
 async function createProjectAndQueue(params: {
   userId: number;
@@ -106,7 +93,6 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await assertViralGate(input.topic);
       return createProjectAndQueue({
         userId: ctx.user.id,
         topic: input.topic,
@@ -160,6 +146,10 @@ export const projectRouter = router({
         throw new Error(`Không có topic nào đạt viral threshold ${VIRAL_THRESHOLD}`);
       }
       topicItem = queuedTopics.find((q) => q.id === best.id)!;
+        .limit(1);
+
+      const topicItem = queuedTopics[0];
+      if (!topicItem) throw new Error("No queued topics available for this niche");
 
       return createProjectAndQueue({
         userId: ctx.user.id,
@@ -201,10 +191,6 @@ export const projectRouter = router({
       const rows = filtered.slice(0, input.limit);
       const created = [] as Array<{ topicQueueId: number; projectId: number; jobId: number }>;
       for (const row of rows) {
-        const prediction = await simulateViralPotential({ topic: row.topic, title: row.topic, threshold: VIRAL_THRESHOLD });
-        if (prediction.decision !== "allow") {
-          continue;
-        }
         const result = await createProjectAndQueue({
           userId: ctx.user.id,
           topic: row.topic,
