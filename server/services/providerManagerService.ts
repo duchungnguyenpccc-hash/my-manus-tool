@@ -26,6 +26,28 @@ const defaults: Record<ProviderCategory, ProviderConfig> = {
   render: { mode: "cloud", providerId: "creatomate" },
 };
 
+function getBudgetAwareDefault(
+  category: ProviderCategory,
+  budget?: number,
+  roiPriority?: "low_cost" | "balanced" | "performance",
+  viralScore?: number,
+  costMode: "LOCAL" | "CLOUD" | "AUTO" = "AUTO"
+) {
+  const lowBudget = typeof budget === "number" && budget > 0 && budget < 100;
+  const shouldUseCloud = costMode === "CLOUD" || roiPriority === "performance" || (typeof viralScore === "number" && viralScore >= 75);
+  if (shouldUseCloud) return defaults[category];
+  if (costMode !== "LOCAL" && !lowBudget) return defaults[category];
+
+  const localDefaults: Record<ProviderCategory, ProviderConfig> = {
+    script: { mode: "local", providerId: "ollama" },
+    image: { mode: "local", providerId: "stable-diffusion" },
+    voice: { mode: "local", providerId: "coqui" },
+    render: { mode: "local", providerId: "ffmpeg" },
+  };
+
+  return localDefaults[category];
+}
+
 async function getUserProviderConfig(userId: number, category: ProviderCategory): Promise<ProviderConfig> {
   const db = await getDb();
   if (!db) return defaults[category];
@@ -99,26 +121,68 @@ export const providerManagerService = {
     return db.select().from(providerConfigurations).where(eq(providerConfigurations.userId, userId));
   },
 
+  async getOptimalProviderConfig(input: {
+    userId: number;
+    category: ProviderCategory;
+    monthlyBudget?: number;
+    roiPriority?: "low_cost" | "balanced" | "performance";
+    viralScore?: number;
+    costMode?: "LOCAL" | "CLOUD" | "AUTO";
+  }): Promise<ProviderConfig> {
+    const configured = await getUserProviderConfig(input.userId, input.category);
+    if (configured.providerId) {
+      const autoSwitch = Boolean((configured.settings ?? {}).autoSwitch);
+      if (!autoSwitch) return configured;
+    }
+
+    return getBudgetAwareDefault(input.category, input.monthlyBudget, input.roiPriority, input.viralScore, input.costMode);
+  },
+
   async generateScript(params: {
     userId: number;
     topic: string;
     sceneCount: number;
     videoDuration: number;
     nichePrompt?: string;
+    monthlyBudget?: number;
+    roiPriority?: "low_cost" | "balanced" | "performance";
+    viralScore?: number;
+    costMode?: "LOCAL" | "CLOUD" | "AUTO";
   }) {
-    const config = await getUserProviderConfig(params.userId, "script");
+    const config = await this.getOptimalProviderConfig({
+      userId: params.userId,
+      category: "script",
+      monthlyBudget: params.monthlyBudget,
+      roiPriority: params.roiPriority,
+      viralScore: params.viralScore,
+      costMode: params.costMode,
+    });
     const provider = scriptProviders.find((p) => p.id === config.providerId) ?? openAiScriptProvider;
     return provider.generateScript(params);
   },
 
-  async generateImage(params: { userId: number; prompt: string; model?: string }) {
-    const config = await getUserProviderConfig(params.userId, "image");
+  async generateImage(params: { userId: number; prompt: string; model?: string; monthlyBudget?: number; roiPriority?: "low_cost" | "balanced" | "performance"; viralScore?: number; costMode?: "LOCAL" | "CLOUD" | "AUTO" }) {
+    const config = await this.getOptimalProviderConfig({
+      userId: params.userId,
+      category: "image",
+      monthlyBudget: params.monthlyBudget,
+      roiPriority: params.roiPriority,
+      viralScore: params.viralScore,
+      costMode: params.costMode,
+    });
     const provider = imageProviders.find((p) => p.id === config.providerId) ?? midjourneyImageProvider;
     return provider.generateImage(params);
   },
 
-  async generateVoice(params: { userId: number; text: string; voicePreset?: string }) {
-    const config = await getUserProviderConfig(params.userId, "voice");
+  async generateVoice(params: { userId: number; text: string; voicePreset?: string; monthlyBudget?: number; roiPriority?: "low_cost" | "balanced" | "performance"; viralScore?: number; costMode?: "LOCAL" | "CLOUD" | "AUTO" }) {
+    const config = await this.getOptimalProviderConfig({
+      userId: params.userId,
+      category: "voice",
+      monthlyBudget: params.monthlyBudget,
+      roiPriority: params.roiPriority,
+      viralScore: params.viralScore,
+      costMode: params.costMode,
+    });
     const provider = voiceProviders.find((p) => p.id === config.providerId) ?? elevenLabsVoiceProvider;
     return provider.generateVoice(params);
   },
@@ -128,8 +192,19 @@ export const providerManagerService = {
     videoClips: Array<{ url: string; duration?: number; index?: number }>;
     audioUrl: string;
     textOverlays?: Array<Record<string, unknown>>;
+    monthlyBudget?: number;
+    roiPriority?: "low_cost" | "balanced" | "performance";
+    viralScore?: number;
+    costMode?: "LOCAL" | "CLOUD" | "AUTO";
   }) {
-    const config = await getUserProviderConfig(params.userId, "render");
+    const config = await this.getOptimalProviderConfig({
+      userId: params.userId,
+      category: "render",
+      monthlyBudget: params.monthlyBudget,
+      roiPriority: params.roiPriority,
+      viralScore: params.viralScore,
+      costMode: params.costMode,
+    });
     const provider = renderProviders.find((p) => p.id === config.providerId) ?? creatomateRenderProvider;
     return provider.render(params);
   },

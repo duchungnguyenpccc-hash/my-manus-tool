@@ -10,6 +10,8 @@ import { createContext } from "./context";
 import { ENV } from "./env";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrapWorkflowWorker } from "../workers/workflowWorker";
+import { strategyEngine } from "../services/strategyEngine";
+import { batchProductionService } from "../services/batchProductionService";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -46,6 +48,56 @@ async function startServer() {
       database: db ? "connected" : "unavailable",
       timestamp: new Date().toISOString(),
     });
+  });
+  app.get("/strategy/score-topic", async (req, res) => {
+    try {
+      const topic = String(req.query.topic ?? "").trim();
+      if (!topic) {
+        return res.status(400).json({ error: "topic is required" });
+      }
+
+      const title = typeof req.query.title === "string" ? req.query.title : topic;
+      const threshold = req.query.threshold ? Number(req.query.threshold) : undefined;
+      const historicalTopics =
+        typeof req.query.historicalTopics === "string"
+          ? req.query.historicalTopics.split(",").map((item) => item.trim()).filter(Boolean)
+          : [];
+
+      const result = await strategyEngine.scoreTopic({
+        topic,
+        title,
+        threshold,
+        historicalTopics,
+      });
+
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+  app.post("/projects/batch-create", async (req, res) => {
+    try {
+      const ctx = await createContext({ req, res, info: {} as any });
+      if (!ctx.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const nicheId = Number(req.body?.nicheId);
+      const numberOfVideos = Number(req.body?.numberOfVideos);
+      if (!nicheId || !numberOfVideos) {
+        return res.status(400).json({ error: "nicheId and numberOfVideos are required" });
+      }
+
+      const result = await batchProductionService.createBatch({
+        userId: ctx.user.id,
+        nicheId,
+        numberOfVideos,
+      });
+
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
   });
   // OAuth callback under /api/oauth/callback
   if (ENV.localDevMode) {

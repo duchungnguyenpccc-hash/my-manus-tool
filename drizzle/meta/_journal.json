@@ -36,6 +36,13 @@
       "when": 1773500000000,
       "tag": "0004_control_execution_plane_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1773600000000,
+      "tag": "0005_hybrid_provider_config",
+      "breakpoints": true
     }
   ]
 }

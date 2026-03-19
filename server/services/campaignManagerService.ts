@@ -16,7 +16,7 @@ export const campaignManagerService = {
       userId: params.userId,
       nicheId: params.nicheId,
       name: params.name,
-      strategy: params.strategy ?? {},
+      strategy: this.normalizeStrategy(params.strategy),
       status: "active",
     });
 
@@ -33,6 +33,26 @@ export const campaignManagerService = {
       .where(nicheId ? and(eq(campaigns.userId, userId), eq(campaigns.nicheId, nicheId)) : eq(campaigns.userId, userId))
       .orderBy(desc(campaigns.createdAt));
 
-    return rows;
+    return rows.map((row) => ({
+      ...row,
+      strategy: this.normalizeStrategy((row.strategy ?? {}) as Record<string, unknown>),
+    }));
+  },
+
+  normalizeStrategy(strategy?: Record<string, unknown>) {
+    const monthlyBudget = Number(strategy?.monthlyBudget ?? 0);
+    const postingFrequency = Number(strategy?.postingFrequency ?? 0);
+    const viralThreshold = Number(strategy?.viralThreshold ?? process.env.VIRAL_SCORE_THRESHOLD ?? 65);
+
+    return {
+      ...(strategy ?? {}),
+      monthlyBudget,
+      postingFrequency,
+      viralThreshold,
+      budgetPerVideo:
+        monthlyBudget > 0 && postingFrequency > 0
+          ? Number((monthlyBudget / postingFrequency).toFixed(2))
+          : 0,
+    };
   },
 };

@@ -7,6 +7,7 @@ import { scoreHookRetentionPotential, selectBestHook } from "./enhancedHookGener
 import { scoreThumbnailConcept, selectBestThumbnailDesign } from "./thumbnailOptimizerService";
 import { scoreTitleCTRPotential, selectBestTitleVariation } from "./titleGenerationService";
 import { calculateSemanticSimilarity } from "./contentFingerprintingService";
+import { strategyEngine } from "./strategyEngine";
 
 describe("growth engine scoring primitives", () => {
   it("ranks viral topics and enforces top-N selection", async () => {
@@ -25,6 +26,19 @@ describe("growth engine scoring primitives", () => {
     expect(result.ranked[0].scores.viralProbability).toBeGreaterThanOrEqual(
       result.ranked[1].scores.viralProbability
     );
+  });
+
+  it("strategy engine keeps only the top ~20 percent of ranked topics", async () => {
+    const ranked = await strategyEngine.rankTopics({
+      topics: Array.from({ length: 10 }, (_, index) => ({
+        topic: `How to scale faceless channel idea ${index + 1}`,
+      })),
+      topN: 2,
+    });
+
+    expect(ranked.selected.length).toBeLessThanOrEqual(2);
+    expect(ranked.ranked[0].curiosityScore).toBeGreaterThanOrEqual(0);
+    expect(ranked.ranked[0].clickPotential).toBeGreaterThanOrEqual(0);
   });
 
   it("calculates novelty from topic overlap", () => {
@@ -128,5 +142,18 @@ describe("growth engine scoring primitives", () => {
     ).toBeGreaterThan(
       calculateSemanticSimilarity("AI automation workflow for monetization", "gardening basics for beginners")
     );
+  });
+
+  it("exposes strategy-engine topic scoring shape", async () => {
+    const result = await strategyEngine.scoreTopic({
+      topic: "How to use AI to grow a faceless YouTube channel",
+      historicalTopics: ["basic gardening tips", "retro gaming review"],
+    });
+
+    expect(result.viralProbability).toBeGreaterThanOrEqual(0);
+    expect(result.viralProbability).toBeLessThanOrEqual(100);
+    expect(result.noveltyScore).toBeGreaterThanOrEqual(0);
+    expect(result.predictedCTR).toBeGreaterThanOrEqual(0);
+    expect(result.predictedRetention).toBeGreaterThanOrEqual(0);
   });
 });

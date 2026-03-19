@@ -56,6 +56,17 @@ export function selectBestHook(hooks: HookVariation[]): HookVariation {
   });
 }
 
+export async function generateThreeHooksAndPickBest(topic: string, niche: string): Promise<{
+  hooks: HookVariation[];
+  bestHook: HookVariation;
+}> {
+  const hooks = await generateHookVariations(topic, niche, 3);
+  return {
+    hooks,
+    bestHook: selectBestHook(hooks),
+  };
+}
+
 /**
  * Generate multiple hook variations for a topic
  */

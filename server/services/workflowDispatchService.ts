@@ -10,6 +10,8 @@ export interface WorkflowJobPayload {
   voiceId?: string;
   imageModel?: "flux" | "qwen";
   videoModel?: "veo3" | "kling";
+  variant?: "short" | "long";
+  costMode?: "LOCAL" | "CLOUD" | "AUTO" | "auto";
 }
 
 export async function enqueueWorkflowJob(input: {

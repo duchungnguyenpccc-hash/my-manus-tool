@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { niches, topicCandidates } from "../../drizzle/schema";
+import { rankTopicsByViralPotential } from "./youtubeAlgorithmSimulatorService";
 
 type GeneratedTopic = {
   topic: string;
@@ -54,6 +55,29 @@ export const aiTopicGeneratorService = {
       generated = fallbackTopics(nicheName).slice(0, limit);
     }
 
+    const minCandidates = Math.max(10, limit);
+    if (generated.length < minCandidates) {
+      generated = [...generated, ...fallbackTopics(nicheName)].slice(0, minCandidates);
+    }
+
+    const ranked = await rankTopicsByViralPotential({
+      topics: generated.slice(0, 20).map((item) => ({
+        topic: item.topic,
+        title: item.titleSuggestion,
+        hook: item.hookSuggestion,
+      })),
+      topN: Math.min(limit, Number(process.env.VIRAL_GATE_TOP_N ?? limit)),
+    });
+
+    const rankedMap = new Map(ranked.ranked.map((item) => [item.topic, item]));
+    generated = generated
+      .map((item) => ({
+        ...item,
+        score: rankedMap.get(item.topic)?.scores.viralProbability ?? item.score,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(20, generated.length));
+
     await db.insert(topicCandidates).values(
       generated.map((item) => ({
         userId,
@@ -68,7 +92,12 @@ export const aiTopicGeneratorService = {
       }))
     );
 
-    return generated;
+    return {
+      candidatesGenerated: generated.length,
+      topCandidatesSelected: ranked.selected.length,
+      selectedTopics: ranked.selected.map((item) => item.topic),
+      topics: generated,
+    };
   },
 
   async listTopicCandidates(userId: number, nicheId: number) {

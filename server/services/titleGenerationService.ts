@@ -28,6 +28,17 @@ export function selectBestTitleVariation<T extends TitleGenerationResult>(titles
   );
 }
 
+export async function generateFiveTitlesAndPickBest(topic: string): Promise<{
+  titles: TitleGenerationResult[];
+  bestTitle: TitleGenerationResult;
+}> {
+  const titles = await TitleGenerationService.generateTitleVariations(topic, 5);
+  return {
+    titles,
+    bestTitle: selectBestTitleVariation(titles),
+  };
+}
+
 /**
  * Title Generation Service
  * Generates SEO-optimized titles and descriptions for video content

@@ -1,16 +1,13 @@
 import { getDb } from "../db";
 import { workflowTasks, videoProjects, niches } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
-import { getApiKey } from "../utils/apiKeyDb";
 import { executeParallel, type ParallelTask } from "./parallelExecutor";
-import { generateVideoScript } from "./openaiService";
-import { generateImage, generateVideoFromImage } from "./piapiService";
-import { textToSpeech } from "./elevenLabsService";
-import { renderVideo } from "./creatomateService";
+import { generateVideoFromImage } from "./piapiService";
 import { uploadVideo } from "./youtubeService";
 import { withRetry } from "./resilience";
 import { scriptVersioningService } from "./scriptVersioningService";
 import { optimizeYoutubeMetadata } from "./metadataOptimizationService";
+import { providerManagerService } from "./providerManagerService";
 
 /**
  * Improved Workflow Orchestrator
@@ -96,7 +93,8 @@ export async function executeCompleteWorkflow(
     try {
       scriptResult = await withRetry(
         () =>
-          generateVideoScript({
+          providerManagerService.generateScript({
+            userId,
             topic: config.topic,
             sceneCount: config.sceneCount,
             videoDuration: config.duration,
@@ -138,8 +136,10 @@ export async function executeCompleteWorkflow(
       fn: async () =>
         withRetry(
           () =>
-            generateImage(String(userId), prompt, {
-              model: (config.imageModel || "qwen") as "qwen" | "flux1-schnell",
+            providerManagerService.generateImage({
+              userId,
+              prompt,
+              model: config.imageModel || "qwen",
             }),
           { operationName: `generateImage:${idx}`, timeoutMs: 300000, maxAttempts: 3 }
         ),
@@ -187,16 +187,9 @@ export async function executeCompleteWorkflow(
     const videoUrls = videoResults.map((r) => r.data?.url).filter(Boolean);
     await completeWorkflowTask(videoTaskId, { generated: videoUrls.length });
 
-    const elevenLabsKey = await getApiKey(userId, "elevenlabs");
-    if (!elevenLabsKey) throw new Error("ElevenLabs API key not configured");
-
     const audioTaskId = await createWorkflowTask(projectId, "audio", { step: "generate_audio" });
     const audioResult = await withRetry(
-      () =>
-        textToSpeech(elevenLabsKey, {
-          text: scriptResult.voiceScript,
-          voicePreset: (config.voiceId as any) || "bella",
-        }),
+      () => providerManagerService.generateVoice({ userId, text: scriptResult.voiceScript, voicePreset: config.voiceId }),
       { operationName: "textToSpeech", timeoutMs: 180000, maxAttempts: 3 }
     );
 
@@ -227,9 +220,10 @@ export async function executeCompleteWorkflow(
     const renderTaskId = await createWorkflowTask(projectId, "render", { step: "render_video", clips: elements.videoClips.length });
     const finalVideoResult = await withRetry(
       () =>
-        renderVideo(String(userId), {
+        providerManagerService.renderVideo({
+          userId,
           videoClips: elements.videoClips,
-          audioTracks: [{ url: elements.audioUrl }],
+          audioUrl: elements.audioUrl,
           textOverlays: elements.textOverlays,
         }),
       { operationName: "renderVideo", timeoutMs: 900000, maxAttempts: 2 }

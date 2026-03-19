@@ -22,6 +22,9 @@ export default function Dashboard() {
   const statsQuery = trpc.project.getStats.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const dashboardOverviewQuery = trpc.controlPlane.getDashboardOverview.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   const archiveMutation = trpc.project.delete.useMutation({
     onSuccess: async () => {
@@ -44,6 +47,15 @@ export default function Dashboard() {
 
   const projects = projectsQuery.data ?? [];
   const stats = statsQuery.data;
+  const viralBatchQuery = trpc.algorithmSimulator.evaluateBatch.useQuery(
+    {
+      topics: projects.slice(0, 10).map((project) => ({
+        topic: project.topic,
+        title: project.title,
+      })),
+    },
+    { enabled: isAuthenticated && projects.length > 0 }
+  );
 
   const monthlyProjects = useMemo(() => {
     const now = new Date();
@@ -52,6 +64,17 @@ export default function Dashboard() {
       return createdAt.getMonth() === now.getMonth() && createdAt.getFullYear() === now.getFullYear();
     }).length;
   }, [projects]);
+
+  const averageViralScore = useMemo(() => {
+    const scores = viralBatchQuery.data ?? [];
+    if (!scores.length) return 0;
+    return Math.round(scores.reduce((sum, item) => sum + item.viralProbability, 0) / scores.length);
+  }, [viralBatchQuery.data]);
+
+  const performanceTrend = useMemo(() => {
+    if (!stats?.totalProjects) return 0;
+    return Math.round(((stats.completedProjects ?? 0) / Math.max(1, stats.totalProjects)) * 100);
+  }, [stats]);
 
   if (!isAuthenticated) {
     return null;
@@ -103,6 +126,10 @@ export default function Dashboard() {
               { label: "Videos Created", value: stats?.completedProjects ?? 0, icon: "🎬" },
               { label: "Processing", value: stats?.processingProjects ?? 0, icon: "⚙️" },
               { label: "This Month", value: monthlyProjects, icon: "📈" },
+              { label: "Avg Viral Score", value: averageViralScore, icon: "🔥" },
+              { label: "Cost / Video", value: `$${dashboardOverviewQuery.data?.costPerVideo ?? 0}`, icon: "💸" },
+              { label: "Cost / 1k Views", value: `$${dashboardOverviewQuery.data?.costPer1kViews ?? 0}`, icon: "🧮" },
+              { label: "Performance Trend", value: `${performanceTrend}%`, icon: "📉" },
             ].map((stat, idx) => (
               <Card key={idx} className="bg-slate-800/50 border-slate-700">
                 <CardHeader className="pb-3">
@@ -117,6 +144,33 @@ export default function Dashboard() {
               </Card>
             ))}
           </div>
+
+          <div className="space-y-8">
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">Topic Ranking Snapshot</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Highest-scoring recent topics ranked by predicted viral probability and ROI fitness.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(viralBatchQuery.data ?? []).slice(0, 5).map((item, index) => (
+                  <div key={`${item.viralProbability}-${index}`} className="flex items-center justify-between rounded-lg border border-slate-700 px-4 py-3">
+                    <div>
+                      <div className="text-sm text-slate-300">#{index + 1}</div>
+                      <div className="font-medium text-white">{projects[index]?.title ?? projects[index]?.topic}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-semibold text-amber-400">{item.viralProbability}</div>
+                      <div className="text-xs text-slate-400">viral score</div>
+                    </div>
+                  </div>
+                ))}
+                {!viralBatchQuery.data?.length && (
+                  <div className="text-sm text-slate-400">No ranked topics yet.</div>
+                )}
+              </CardContent>
+            </Card>
 
           <div>
             <div className="mb-6">
@@ -197,6 +251,7 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>
