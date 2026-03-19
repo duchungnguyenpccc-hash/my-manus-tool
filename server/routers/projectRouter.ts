@@ -6,8 +6,8 @@ import { eq, and, desc, asc } from "drizzle-orm";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "../services/workflowDispatchService";
 import { scriptVersioningService } from "../services/scriptVersioningService";
 import { simulateViralPotential } from "../services/youtubeAlgorithmSimulatorService";
-import { strategyEngine } from "../services/strategyEngine";
 import { batchProductionService } from "../services/batchProductionService";
+import { decisionEngine } from "../services/decisionEngine";
 
 const VIRAL_THRESHOLD = Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65);
 const VIRAL_GATE_TOP_N = Number(process.env.VIRAL_GATE_TOP_N ?? 3);
@@ -150,11 +150,10 @@ export const projectRouter = router({
 
       if (!queuedTopics[0]) throw new Error("No queued topics available for this niche");
 
-      const gate = await strategyEngine.rankTopics({
+      const gate = await decisionEngine.rankAndGateTopics({
+        userId: ctx.user.id,
+        nicheId: input.nicheId,
         topics: queuedTopics.map((item) => ({ topic: item.topic })),
-        historicalTopics: queuedTopics.map((item) => item.topic),
-        threshold: VIRAL_THRESHOLD,
-        topN: VIRAL_GATE_TOP_N,
       });
 
       const best = gate.selected[0];
@@ -201,11 +200,10 @@ export const projectRouter = router({
         : allQueued;
 
       const rows = filtered.slice(0, Math.max(input.limit, VIRAL_GATE_TOP_N * 2));
-      const gate = await strategyEngine.rankTopics({
+      const gate = await decisionEngine.rankAndGateTopics({
+        userId: ctx.user.id,
+        nicheId: input.nicheId ?? rows[0]?.nicheId ?? 0,
         topics: rows.map((row) => ({ topic: row.topic })),
-        historicalTopics: rows.map((row) => row.topic),
-        threshold: VIRAL_THRESHOLD,
-        topN: input.limit,
       });
       const allowedTopics = new Set(gate.selected.map((item) => item.topic));
       const created = [] as Array<{ topicQueueId: number; projectId: number; jobId: number }>;

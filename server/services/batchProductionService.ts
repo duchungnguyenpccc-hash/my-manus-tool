@@ -2,8 +2,8 @@ import { desc, eq, and } from "drizzle-orm";
 import { nicheTopicQueue, videoProjects } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "./workflowDispatchService";
-import { strategyEngine } from "./strategyEngine";
 import { topicRapidGenerator } from "./topicRapidGenerator";
+import { decisionEngine } from "./decisionEngine";
 
 type Variant = "short" | "long";
 
@@ -72,7 +72,19 @@ export const batchProductionService = {
       .limit(100);
 
     if (queuedTopics.length < desired) {
-      await topicRapidGenerator.generateRapidTopics({ nicheId: input.nicheId, userId: input.userId, count: 60 });
+      const rapid = await topicRapidGenerator.generateRapidTopics({ nicheId: input.nicheId, userId: input.userId, count: 100 });
+      if (rapid.selectedTopics.length > 0) {
+        await db.insert(nicheTopicQueue).values(
+          rapid.selectedTopics.map((topic) => ({
+            nicheId: input.nicheId,
+            userId: input.userId,
+            topic: topic.topic,
+            priority: Math.max(1, 101 - topic.viralProbability),
+            source: "rapid_generator" as const,
+            status: "queued" as const,
+          }))
+        );
+      }
       queuedTopics = await db
         .select()
         .from(nicheTopicQueue)
@@ -81,10 +93,10 @@ export const batchProductionService = {
         .limit(100);
     }
 
-    const ranked = await strategyEngine.rankTopics({
+    const ranked = await decisionEngine.rankAndGateTopics({
+      userId: input.userId,
+      nicheId: input.nicheId,
       topics: queuedTopics.map((item) => ({ topic: item.topic })),
-      topN: Math.max(1, Math.ceil(queuedTopics.length * 0.2)),
-      historicalTopics: queuedTopics.map((item) => item.topic),
     });
 
     const winners = ranked.selected.slice(0, Math.max(1, Math.ceil(desired / 2)));

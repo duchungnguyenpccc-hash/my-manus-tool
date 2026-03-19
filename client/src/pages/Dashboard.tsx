@@ -130,6 +130,8 @@ export default function Dashboard() {
               { label: "Cost / Video", value: `$${dashboardOverviewQuery.data?.costPerVideo ?? 0}`, icon: "💸" },
               { label: "Cost / 1k Views", value: `$${dashboardOverviewQuery.data?.costPer1kViews ?? 0}`, icon: "🧮" },
               { label: "Performance Trend", value: `${performanceTrend}%`, icon: "📉" },
+              { label: "Win Rate", value: `${dashboardOverviewQuery.data?.winRate ?? 0}%`, icon: "🏆" },
+              { label: "ROI Estimate", value: `${dashboardOverviewQuery.data?.roiEstimate ?? 0}x`, icon: "💼" },
             ].map((stat, idx) => (
               <Card key={idx} className="bg-slate-800/50 border-slate-700">
                 <CardHeader className="pb-3">
@@ -169,6 +171,9 @@ export default function Dashboard() {
                 {!viralBatchQuery.data?.length && (
                   <div className="text-sm text-slate-400">No ranked topics yet.</div>
                 )}
+                <div className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-300">
+                  Distribution — High: {dashboardOverviewQuery.data?.viralScoreDistribution?.high ?? 0}% · Medium: {dashboardOverviewQuery.data?.viralScoreDistribution?.medium ?? 0}% · Low: {dashboardOverviewQuery.data?.viralScoreDistribution?.low ?? 0}%
+                </div>
               </CardContent>
             </Card>
 

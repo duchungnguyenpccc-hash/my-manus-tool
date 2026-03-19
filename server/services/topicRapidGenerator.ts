@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { niches } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { trendResearchEngineService } from "./trendResearchEngineService";
-import { strategyEngine } from "./strategyEngine";
+import { decisionEngine } from "./decisionEngine";
 
 const CURIOSITY_HOOKS = [
   "How to",
@@ -50,16 +50,16 @@ export const topicRapidGenerator = {
       if (generated.size >= count) break;
     }
 
-    const ranked = await strategyEngine.rankTopics({
+    const ranked = await decisionEngine.rankAndGateTopics({
+      userId: input.userId,
+      nicheId: input.nicheId,
       topics: Array.from(generated).map((topic) => ({ topic, title: topic })),
-      topN: Math.max(1, Math.ceil(generated.size * 0.2)),
-      historicalTopics: seeds.map((seed) => seed.keyword),
     });
 
     return {
       nicheName,
       generatedCount: generated.size,
-      selectedCount: ranked.selected.length,
+      selectedCount: ranked.selectedCount,
       rankedTopics: ranked.ranked,
       selectedTopics: ranked.selected,
     };

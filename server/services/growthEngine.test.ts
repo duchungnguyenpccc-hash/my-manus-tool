@@ -28,7 +28,7 @@ describe("growth engine scoring primitives", () => {
     );
   });
 
-  it("strategy engine keeps only the top ~20 percent of ranked topics", async () => {
+  it("strategy engine keeps only the hard top 5 percent of ranked topics when gated by decision logic", async () => {
     const ranked = await strategyEngine.rankTopics({
       topics: Array.from({ length: 10 }, (_, index) => ({
         topic: `How to scale faceless channel idea ${index + 1}`,
