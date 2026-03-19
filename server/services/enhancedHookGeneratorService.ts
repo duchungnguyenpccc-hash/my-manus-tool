@@ -31,6 +31,42 @@ export interface HookAnalysis {
   timing: string;
 }
 
+const HOOK_POWER_WORDS = ["secret", "mistake", "truth", "fast", "simple", "warning", "avoid", "before", "viral"];
+
+export function scoreHookRetentionPotential(hook: string): number {
+  const normalized = hook.toLowerCase().trim();
+  let score = 35;
+
+  if (normalized.length >= 35 && normalized.length <= 110) score += 20;
+  if (/\?/.test(normalized)) score += 8;
+  if (/\d/.test(normalized)) score += 6;
+  if (/(but|before|without|until|unless)/.test(normalized)) score += 8;
+
+  const powerHits = HOOK_POWER_WORDS.filter((word) => normalized.includes(word)).length;
+  score += powerHits * 5;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+export function selectBestHook(hooks: HookVariation[]): HookVariation {
+  return hooks.reduce((best, current) => {
+    const bestScore = Math.round(best.engagementScore * 0.7 + scoreHookRetentionPotential(best.hook) * 0.3);
+    const currentScore = Math.round(current.engagementScore * 0.7 + scoreHookRetentionPotential(current.hook) * 0.3);
+    return currentScore > bestScore ? current : best;
+  });
+}
+
+export async function generateThreeHooksAndPickBest(topic: string, niche: string): Promise<{
+  hooks: HookVariation[];
+  bestHook: HookVariation;
+}> {
+  const hooks = await generateHookVariations(topic, niche, 3);
+  return {
+    hooks,
+    bestHook: selectBestHook(hooks),
+  };
+}
+
 /**
  * Generate multiple hook variations for a topic
  */
@@ -274,9 +310,7 @@ export async function getCompleteHookAnalysis(
       getHookStrategies(niche),
     ]);
 
-    const bestHook = hooks.reduce((prev, current) =>
-      prev.engagementScore > current.engagementScore ? prev : current
-    );
+    const bestHook = selectBestHook(hooks);
 
     const scriptIntegration = `
 Hook: "${bestHook.hook}"

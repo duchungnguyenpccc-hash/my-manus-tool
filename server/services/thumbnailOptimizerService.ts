@@ -44,6 +44,41 @@ export interface CTRPrediction {
   };
 }
 
+export function scoreThumbnailConcept(design: ThumbnailDesign): number {
+  let score = 40;
+  const textCount = design.textSuggestions.join(" ").trim().split(/\s+/).filter(Boolean).length;
+  if (textCount > 0 && textCount <= 4) score += 12;
+  if (design.emotionTriggers.length > 0) score += Math.min(15, design.emotionTriggers.length * 4);
+  if (design.designElements.some((element) => /face|expression|close[- ]?up/i.test(element))) score += 10;
+  if (design.reasoning.length > 30) score += 6;
+  score += Math.min(17, Math.round(design.predictedCTR));
+  return Math.max(0, Math.min(100, score));
+}
+
+export function selectBestThumbnailDesign(designs: ThumbnailDesign[]): ThumbnailDesign {
+  return designs.reduce((best, current) =>
+    scoreThumbnailConcept(current) > scoreThumbnailConcept(best) ? current : best
+  );
+}
+
+function getFallbackThumbnailDesign(topic: string): ThumbnailDesign {
+  return {
+    title: `${topic} Thumbnail`,
+    description: "High-contrast fallback thumbnail concept",
+    colorScheme: {
+      primary: "#FF0000",
+      secondary: "#111111",
+      accent: "#FFD400",
+      textColor: "#FFFFFF",
+    },
+    textSuggestions: ["WATCH THIS"],
+    designElements: ["face close-up", "bold contrast"],
+    emotionTriggers: ["curiosity"],
+    predictedCTR: 8,
+    reasoning: "Fallback concept optimized for contrast and curiosity.",
+  };
+}
+
 /**
  * Generate optimized thumbnail designs
  */
@@ -184,7 +219,7 @@ Return as JSON:
       topic,
       niche,
       designs: data.designs || [],
-      bestDesign: data.designs?.[0] || {},
+      bestDesign: data.designs?.length ? selectBestThumbnailDesign(data.designs) : getFallbackThumbnailDesign(topic),
       competitorInsights: data.competitorInsights || [],
       improvements: data.improvements || [],
     };

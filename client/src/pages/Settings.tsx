@@ -1,19 +1,62 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Eye, EyeOff, Trash2, Plus, Check, AlertCircle } from "lucide-react";
+import { Trash2, Plus, Check, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+type ProviderId = "openai" | "piapi" | "elevenlabs" | "creatomate" | "youtube";
 
 export default function Settings() {
   const { user, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState("api-keys");
   const [showAddKey, setShowAddKey] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState("openai");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>("openai");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+
+  const apiKeysQuery = trpc.apiKey.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const utils = trpc.useUtils();
+
+  const addApiKeyMutation = trpc.apiKey.add.useMutation({
+    onSuccess: async () => {
+      await utils.apiKey.list.invalidate();
+      toast.success("API key added successfully");
+      setShowAddKey(false);
+      setApiKeyInput("");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to add API key");
+    },
+  });
+
+  const deleteApiKeyMutation = trpc.apiKey.delete.useMutation({
+    onSuccess: async () => {
+      await utils.apiKey.list.invalidate();
+      toast.success("API key deleted");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete API key");
+    },
+  });
+
+  const testApiKeyMutation = trpc.apiKey.test.useMutation({
+    onSuccess: async (result, variables) => {
+      await utils.apiKey.list.invalidate();
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(`${variables.provider}: ${result.message}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to test API key");
+    },
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -25,62 +68,53 @@ export default function Settings() {
     return null;
   }
 
-  // TODO: Implement API key listing and management
-  const apiKeys: any[] = [];
+  const providers = useMemo(
+    () => [
+      {
+        id: "openai" as const,
+        name: "OpenAI",
+        description: "For script and prompt generation",
+        keyPrefix: "sk-",
+        docs: "https://platform.openai.com/api-keys",
+      },
+      {
+        id: "piapi" as const,
+        name: "PiAPI",
+        description: "For image and video generation",
+        keyPrefix: "pi_",
+        docs: "https://piapi.ai/docs",
+      },
+      {
+        id: "elevenlabs" as const,
+        name: "ElevenLabs",
+        description: "For text-to-speech generation",
+        keyPrefix: "sk_",
+        docs: "https://elevenlabs.io/docs",
+      },
+      {
+        id: "creatomate" as const,
+        name: "Creatomate",
+        description: "For video rendering and composition",
+        keyPrefix: "ct_",
+        docs: "https://creatomate.com/docs",
+      },
+      {
+        id: "youtube" as const,
+        name: "YouTube",
+        description: "For automatic video uploads",
+        keyPrefix: "ya29_",
+        docs: "https://developers.google.com/youtube",
+      },
+    ],
+    []
+  );
 
-  const providers = [
-    {
-      id: "openai",
-      name: "OpenAI",
-      description: "For script and prompt generation",
-      keyPrefix: "sk-",
-      docs: "https://platform.openai.com/api-keys",
-    },
-    {
-      id: "piapi",
-      name: "PiAPI",
-      description: "For image and video generation",
-      keyPrefix: "pi_",
-      docs: "https://piapi.ai/docs",
-    },
-    {
-      id: "elevenlabs",
-      name: "ElevenLabs",
-      description: "For text-to-speech generation",
-      keyPrefix: "sk_",
-      docs: "https://elevenlabs.io/docs",
-    },
-    {
-      id: "creatomate",
-      name: "Creatomate",
-      description: "For video rendering and composition",
-      keyPrefix: "ct_",
-      docs: "https://creatomate.com/docs",
-    },
-    {
-      id: "youtube",
-      name: "YouTube",
-      description: "For automatic video uploads",
-      keyPrefix: "ya29_",
-      docs: "https://developers.google.com/youtube",
-    },
-  ];
+  const maskApiKey = (prefix: string) => `${prefix}••••••••••••`;
 
-  const toggleKeyVisibility = (keyId: string) => {
-    setVisibleKeys((prev) => ({
-      ...prev,
-      [keyId]: !prev[keyId],
-    }));
-  };
-
-  const maskApiKey = (key: string) => {
-    if (key.length <= 8) return key;
-    return key.substring(0, 4) + "*".repeat(key.length - 8) + key.substring(key.length - 4);
-  };
+  const apiKeys = apiKeysQuery.data?.keys ?? [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
-      {/* Header */}
       <div className="border-b border-slate-800 bg-slate-950/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-white">Settings</h1>
@@ -89,7 +123,6 @@ export default function Settings() {
       </div>
 
       <div className="container mx-auto px-4 py-12">
-        {/* Tabs */}
         <div className="flex gap-4 mb-8 border-b border-slate-800">
           {[
             { id: "api-keys", label: "API Keys" },
@@ -110,7 +143,6 @@ export default function Settings() {
           ))}
         </div>
 
-        {/* API Keys Tab */}
         {activeTab === "api-keys" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -127,9 +159,15 @@ export default function Settings() {
               </Button>
             </div>
 
-            {/* API Keys List */}
             <div className="grid gap-4">
-              {apiKeys.length === 0 ? (
+              {apiKeysQuery.isLoading ? (
+                <Card className="bg-slate-800/50 border-slate-700">
+                  <CardContent className="py-8 text-center text-slate-300 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading API keys...
+                  </CardContent>
+                </Card>
+              ) : apiKeys.length === 0 ? (
                 <Card className="bg-slate-800/50 border-slate-700 border-dashed">
                   <CardContent className="py-12 text-center">
                     <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-4" />
@@ -144,7 +182,7 @@ export default function Settings() {
                   </CardContent>
                 </Card>
               ) : (
-                apiKeys.map((key: any) => {
+                apiKeys.map((key) => {
                   const provider = providers.find((p) => p.id === key.provider);
                   return (
                     <Card key={key.id} className="bg-slate-800/50 border-slate-700">
@@ -154,48 +192,48 @@ export default function Settings() {
                             <CardTitle className="text-white">{provider?.name}</CardTitle>
                             <CardDescription className="text-slate-400">{provider?.description}</CardDescription>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {key.isActive ? (
-                              <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-semibold flex items-center gap-1 border border-green-500/20">
-                                <Check className="w-3 h-3" />
-                                Active
-                              </div>
-                            ) : (
-                              <div className="px-3 py-1 rounded-full bg-slate-500/10 text-slate-400 text-xs font-semibold border border-slate-500/20">
-                                Inactive
-                              </div>
-                            )}
-                          </div>
+                          {key.isActive ? (
+                            <div className="px-3 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-semibold flex items-center gap-1 border border-green-500/20">
+                              <Check className="w-3 h-3" />
+                              Active
+                            </div>
+                          ) : (
+                            <div className="px-3 py-1 rounded-full bg-slate-500/10 text-slate-400 text-xs font-semibold border border-slate-500/20">
+                              Inactive
+                            </div>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1">
                             <code className="px-3 py-2 bg-slate-700/50 rounded text-sm text-slate-300 font-mono">
-                              {visibleKeys[key.id] ? key.key : maskApiKey(key.key)}
+                              {maskApiKey(provider?.keyPrefix ?? "key_")}
                             </code>
-                            <button
-                              onClick={() => toggleKeyVisibility(key.id)}
-                              className="p-2 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white"
-                            >
-                              {visibleKeys[key.id] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
+                            <span className="text-xs text-slate-400">
+                              Last tested: {key.lastTestedAt ? new Date(key.lastTestedAt).toLocaleString() : "Never"}
+                            </span>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-500 hover:bg-red-500/10"
-                            onClick={() => {
-                              // TODO: Implement delete
-                              toast.error("Delete not yet implemented");
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-slate-600"
+                              onClick={() => testApiKeyMutation.mutate({ provider: key.provider as ProviderId })}
+                              disabled={testApiKeyMutation.isPending}
+                            >
+                              Test
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-500 hover:bg-red-500/10"
+                              onClick={() => deleteApiKeyMutation.mutate({ keyId: key.id })}
+                              disabled={deleteApiKeyMutation.isPending}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -206,7 +244,6 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Profile Tab */}
         {activeTab === "profile" && (
           <div className="max-w-2xl">
             <Card className="bg-slate-800/50 border-slate-700">
@@ -240,7 +277,6 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Billing Tab */}
         {activeTab === "billing" && (
           <div className="max-w-2xl">
             <Card className="bg-slate-800/50 border-slate-700">
@@ -272,7 +308,6 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Add API Key Modal */}
       {showAddKey && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md bg-slate-800 border-slate-700">
@@ -285,7 +320,7 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-white mb-2">Provider</label>
                 <select
                   value={selectedProvider}
-                  onChange={(e) => setSelectedProvider(e.target.value)}
+                  onChange={(e) => setSelectedProvider(e.target.value as ProviderId)}
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-amber-500"
                 >
                   {providers.map((p) => (
@@ -331,14 +366,10 @@ export default function Settings() {
                 </Button>
                 <Button
                   className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
-                  onClick={() => {
-                    // TODO: Implement add API key
-                    toast.success("API key added successfully!");
-                    setShowAddKey(false);
-                    setApiKeyInput("");
-                  }}
+                  onClick={() => addApiKeyMutation.mutate({ provider: selectedProvider, apiKey: apiKeyInput })}
+                  disabled={addApiKeyMutation.isPending || apiKeyInput.trim().length < 10}
                 >
-                  Add Key
+                  {addApiKeyMutation.isPending ? "Adding..." : "Add Key"}
                 </Button>
               </div>
             </CardContent>
