@@ -129,6 +129,23 @@ export const projectRouter = router({
           )
         )
         .orderBy(asc(nicheTopicQueue.priority), asc(nicheTopicQueue.createdAt))
+        .limit(20);
+
+      let topicItem = queuedTopics[0];
+      if (!topicItem) throw new Error("No queued topics available for this niche");
+
+      // Only allow high viral score topics into production pipeline.
+      const scored = [] as Array<{ id: number; score: number; topic: string }>;
+      for (const item of queuedTopics) {
+        const prediction = await simulateViralPotential({ topic: item.topic, title: item.topic, threshold: VIRAL_THRESHOLD });
+        scored.push({ id: item.id, score: prediction.viralScore, topic: item.topic });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored.find((s) => s.score >= VIRAL_THRESHOLD);
+      if (!best) {
+        throw new Error(`Không có topic nào đạt viral threshold ${VIRAL_THRESHOLD}`);
+      }
+      topicItem = queuedTopics.find((q) => q.id === best.id)!;
         .limit(1);
 
       const topicItem = queuedTopics[0];

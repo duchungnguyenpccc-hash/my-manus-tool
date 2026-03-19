@@ -20,6 +20,17 @@ import AdvancedSettingsPage from "./pages/AdvancedSettings";
 import { AutoOptimizationDashboard } from "./pages/AutoOptimizationDashboard";
 import APIProviderSettings from "./pages/APIProviderSettings";
 import { Niches } from "./pages/Niches";
+import TopicAnalyzer from "./pages/TopicAnalyzer";
+
+function RedirectTo({ path }: { path: string }) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation(path, { replace: true });
+  }, [path, setLocation]);
+
+  return null;
+}
 
 function RedirectTo({ path }: { path: string }) {
   const [, setLocation] = useLocation();
