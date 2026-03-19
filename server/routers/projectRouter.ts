@@ -5,19 +5,15 @@ import { nicheTopicQueue, videoProjects, workflowTasks } from "../../drizzle/sch
 import { eq, and, desc, asc } from "drizzle-orm";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "../services/workflowDispatchService";
 import { scriptVersioningService } from "../services/scriptVersioningService";
-import { simulateViralPotential } from "../services/youtubeAlgorithmSimulatorService";
 import { batchProductionService } from "../services/batchProductionService";
 import { decisionEngine } from "../services/decisionEngine";
 
-const VIRAL_THRESHOLD = Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65);
 const VIRAL_GATE_TOP_N = Number(process.env.VIRAL_GATE_TOP_N ?? 3);
 
-async function assertViralGate(topic: string) {
-  const prediction = await simulateViralPotential({ topic, title: topic, threshold: VIRAL_THRESHOLD });
-  if (prediction.decision !== "allow") {
-    throw new Error(
-      `Video bị chặn: viral score ${prediction.viralScore}/100 thấp hơn ngưỡng ${prediction.threshold}/100`
-    );
+async function assertAdaptiveGate(userId: number, nicheId: number | undefined, topic: string) {
+  const prediction = await decisionEngine.evaluateTopic({ userId, nicheId: nicheId ?? 0, topic, title: topic });
+  if (prediction.status !== "approved") {
+    throw new Error(`Video bị chặn: adaptive score ${prediction.adaptiveScore} chưa đạt tiêu chuẩn tự tối ưu.`);
   }
   return prediction;
 }
@@ -109,7 +105,7 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await assertViralGate(input.topic);
+      await assertAdaptiveGate(ctx.user.id, input.nicheId, input.topic);
       return createProjectAndQueue({
         userId: ctx.user.id,
         topic: input.topic,
@@ -158,7 +154,7 @@ export const projectRouter = router({
 
       const best = gate.selected[0];
       if (!best) {
-        throw new Error(`Không có topic nào đạt viral threshold ${VIRAL_THRESHOLD}`);
+        throw new Error("Không có topic nào vượt qua adaptive objective gate.");
       }
       const topicItem = queuedTopics.find((q) => q.topic === best.topic)!;
 
@@ -229,10 +225,11 @@ export const projectRouter = router({
         success: true,
         createdCount: created.length,
         created,
-        threshold: VIRAL_THRESHOLD,
+        threshold: gate.profile.performanceBaseline.averageObjectiveScore,
         selectedTopics: gate.selected.map((item) => ({
           topic: item.topic,
           viralProbability: item.viralProbability,
+          adaptiveScore: item.adaptiveScore,
         })),
       };
     }),

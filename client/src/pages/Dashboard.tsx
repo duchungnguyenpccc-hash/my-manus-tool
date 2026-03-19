@@ -132,6 +132,7 @@ export default function Dashboard() {
               { label: "Performance Trend", value: `${performanceTrend}%`, icon: "📉" },
               { label: "Win Rate", value: `${dashboardOverviewQuery.data?.winRate ?? 0}%`, icon: "🏆" },
               { label: "ROI Estimate", value: `${dashboardOverviewQuery.data?.roiEstimate ?? 0}x`, icon: "💼" },
+              { label: "Auto Mode", value: dashboardOverviewQuery.data?.autonomousMode ? "ON" : "OFF", icon: "🤖" },
             ].map((stat, idx) => (
               <Card key={idx} className="bg-slate-800/50 border-slate-700">
                 <CardHeader className="pb-3">

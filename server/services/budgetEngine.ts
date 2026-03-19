@@ -1,34 +1,57 @@
+import { objectiveEngine, type OptimizationProfileState } from "./objectiveEngine";
+
 export type BudgetDecision = {
   costMode: "LOCAL" | "CLOUD" | "AUTO";
   providerBias: "local" | "cloud";
   rationale: string;
+  recommendedBudget: number;
+  estimatedRoi: number;
 };
 
 export const budgetEngine = {
-  allocate(input: { viralScore: number; dailyVideoQuota?: number; monthlyBudget?: number }): BudgetDecision {
-    const monthlyBudget = input.monthlyBudget ?? 0;
-    const dailyQuota = input.dailyVideoQuota ?? 0;
+  async allocate(input: {
+    userId: number;
+    nicheId: number;
+    viralScore: number;
+    estimatedViews?: number;
+    estimatedRevenue?: number;
+    costPerVideo?: number;
+    profile?: OptimizationProfileState;
+  }): Promise<BudgetDecision> {
+    const profile = input.profile ?? (await objectiveEngine.getProfile(input.userId, input.nicheId));
+    const estimatedRevenue = input.estimatedRevenue ?? profile.budgetPolicy.estimatedRevenuePerVideo;
+    const expectedCost = input.costPerVideo ?? profile.budgetPolicy.targetCostPerVideo;
+    const roi = estimatedRevenue / Math.max(1, expectedCost);
+    const recommendedBudget = Number(
+      (expectedCost * profile.budgetPolicy.roiMultiplier * (input.viralScore >= 75 ? 1.2 : 0.9)).toFixed(2)
+    );
 
-    if (input.viralScore >= 80) {
+    if (roi >= 1.35 || input.viralScore >= 82) {
       return {
         costMode: "CLOUD",
         providerBias: "cloud",
-        rationale: "High viral potential justifies premium provider spend.",
+        rationale: "ROI momentum and predicted upside justify premium spend.",
+        recommendedBudget,
+        estimatedRoi: Number(roi.toFixed(3)),
       };
     }
 
-    if (monthlyBudget > 0 && dailyQuota > 0 && monthlyBudget / Math.max(1, dailyQuota * 30) < 3) {
+    if (roi <= 0.95) {
       return {
         costMode: "LOCAL",
         providerBias: "local",
-        rationale: "Budget per video is constrained, so local providers are favored.",
+        rationale: "Low ROI pattern should conserve spend and rely on cheaper execution.",
+        recommendedBudget,
+        estimatedRoi: Number(roi.toFixed(3)),
       };
     }
 
     return {
       costMode: "AUTO",
-      providerBias: input.viralScore >= 65 ? "cloud" : "local",
-      rationale: "Balanced mode adapts spend to estimated upside.",
+      providerBias: profile.productionPolicy.contentStyle === "aggressive" ? "cloud" : "local",
+      rationale: "Budget follows rolling ROI and the niche's live production policy.",
+      recommendedBudget,
+      estimatedRoi: Number(roi.toFixed(3)),
     };
   },
 };

@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { analyticsFeedback, videoProjects } from "../../drizzle/schema";
 import { getDb } from "../db";
+import { objectiveEngine } from "./objectiveEngine";
 import { getVideoMetrics } from "./youtubeAnalyticsService";
 
 export const analyticsFeedbackService = {
@@ -51,7 +52,8 @@ export const analyticsFeedbackService = {
   },
 
   async getTopicLearningSnapshot(nicheId: number, userId: number) {
-    const rows = await this.getNicheFeedback(nicheId, userId);
+    const [rows, profile] = await Promise.all([this.getNicheFeedback(nicheId, userId), objectiveEngine.getProfile(userId, nicheId)]);
+
     if (!rows.length) {
       return {
         nicheId,
@@ -59,8 +61,12 @@ export const analyticsFeedbackService = {
         averageCtr: 0,
         averageEngagementRate: 0,
         averageViews: 0,
-        recommendedViralThreshold: Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65),
-        insights: ["Not enough post-publish analytics yet. Keep collecting data before tightening the gate."],
+        objectiveScore: profile.performanceBaseline.averageObjectiveScore,
+        factorWeights: profile.factorWeights,
+        productionPolicy: profile.productionPolicy,
+        budgetPolicy: profile.budgetPolicy,
+        blacklistedPatterns: profile.blacklistedPatterns,
+        insights: ["Not enough post-publish analytics yet. Autonomous mode is collecting signals before tightening the loop."],
       };
     }
 
@@ -69,27 +75,27 @@ export const analyticsFeedbackService = {
         acc.ctr += row.ctr;
         acc.engagementRate += row.engagementRate;
         acc.views += row.views;
+        acc.watchTime += row.watchTimeMinutes;
+        acc.revenue += Number(((row.rawMetrics ?? {}) as Record<string, unknown>).revenue ?? 0);
         return acc;
       },
-      { ctr: 0, engagementRate: 0, views: 0 }
+      { ctr: 0, engagementRate: 0, views: 0, watchTime: 0, revenue: 0 }
     );
 
     const averageCtr = Math.round(totals.ctr / rows.length);
     const averageEngagementRate = Math.round(totals.engagementRate / rows.length);
     const averageViews = Math.round(totals.views / rows.length);
-    const recommendedViralThreshold = Math.max(
-      55,
-      Math.min(85, Math.round(averageCtr * 0.35 + averageEngagementRate * 0.25 + (averageViews > 10000 ? 20 : 10)))
-    );
+    const averageWatchTimeMinutes = Math.round(totals.watchTime / rows.length);
+    const averageRevenue = Number((totals.revenue / rows.length).toFixed(2));
 
     const insights = [
-      averageCtr >= 6 ? "CTR is healthy; prioritize aggressive title and thumbnail testing." : "CTR is soft; improve packaging before scaling production.",
-      averageEngagementRate >= 8
-        ? "Engagement is strong; similar topics deserve more publishing budget."
-        : "Engagement lags; refine hook selection and pacing before expanding.",
-      averageViews >= 10000
-        ? "This niche is proving monetizable traction; consider increasing posting frequency."
-        : "Views are still inconsistent; keep the viral gate strict and focus on higher-demand topics.",
+      `Decision weights are evolving toward CTR ${Math.round(profile.factorWeights.ctr * 100)}% / retention ${Math.round(profile.factorWeights.retention * 100)}% / demand ${Math.round(profile.factorWeights.demand * 100)}%.`,
+      profile.budgetPolicy.lastKnownRoi >= 1.2
+        ? "ROI is compounding; autonomous mode can safely spend more on the best patterns."
+        : "ROI is under pressure; the engine is reducing spend and expanding exploration.",
+      profile.blacklistedPatterns.length > 0
+        ? `Kill system is blocking ${profile.blacklistedPatterns.length} low-performing patterns from reuse.`
+        : "No durable failure patterns have been blacklisted yet.",
     ];
 
     return {
@@ -98,7 +104,13 @@ export const analyticsFeedbackService = {
       averageCtr,
       averageEngagementRate,
       averageViews,
-      recommendedViralThreshold,
+      averageWatchTimeMinutes,
+      averageRevenue,
+      objectiveScore: profile.performanceBaseline.averageObjectiveScore,
+      factorWeights: profile.factorWeights,
+      productionPolicy: profile.productionPolicy,
+      budgetPolicy: profile.budgetPolicy,
+      blacklistedPatterns: profile.blacklistedPatterns,
       insights,
     };
   },

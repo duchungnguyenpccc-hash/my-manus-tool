@@ -1,9 +1,10 @@
-import { desc, eq, and } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { nicheTopicQueue, videoProjects } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { enqueueWorkflowJob, getWorkflowQueueStats } from "./workflowDispatchService";
-import { topicRapidGenerator } from "./topicRapidGenerator";
 import { decisionEngine } from "./decisionEngine";
+import { objectiveEngine } from "./objectiveEngine";
+import { topicRapidGenerator } from "./topicRapidGenerator";
+import { enqueueWorkflowJob, getWorkflowQueueStats } from "./workflowDispatchService";
 
 type Variant = "short" | "long";
 
@@ -18,6 +19,7 @@ async function createQueuedProject(params: {
   nicheId: number;
   topic: string;
   variant: Variant;
+  costMode: "LOCAL" | "CLOUD" | "AUTO";
   topicQueueId?: number;
 }) {
   const db = await getDb();
@@ -36,7 +38,7 @@ async function createQueuedProject(params: {
       voicePreset: "alloy",
       autoPublish: false,
       strategyVariant: params.variant,
-      costMode: "auto",
+      costMode: params.costMode,
     },
   });
 
@@ -51,7 +53,7 @@ async function createQueuedProject(params: {
       variant: params.variant,
       sceneCount: variantConfig.sceneCount,
       duration: variantConfig.videoDuration,
-      costMode: "auto",
+      costMode: params.costMode,
     },
   });
 
@@ -63,23 +65,24 @@ export const batchProductionService = {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
-    const desired = Math.max(1, Math.min(50, input.numberOfVideos));
+    const profile = await objectiveEngine.getProfile(input.userId, input.nicheId);
+    const desired = Math.max(1, Math.min(50, Math.max(input.numberOfVideos, Math.round(profile.productionPolicy.videosPerDay))));
     let queuedTopics = await db
       .select()
       .from(nicheTopicQueue)
       .where(and(eq(nicheTopicQueue.userId, input.userId), eq(nicheTopicQueue.nicheId, input.nicheId), eq(nicheTopicQueue.status, "queued")))
       .orderBy(desc(nicheTopicQueue.createdAt))
-      .limit(100);
+      .limit(150);
 
     if (queuedTopics.length < desired) {
-      const rapid = await topicRapidGenerator.generateRapidTopics({ nicheId: input.nicheId, userId: input.userId, count: 100 });
+      const rapid = await topicRapidGenerator.generateRapidTopics({ nicheId: input.nicheId, userId: input.userId, count: profile.productionPolicy.replicationCount });
       if (rapid.selectedTopics.length > 0) {
         await db.insert(nicheTopicQueue).values(
           rapid.selectedTopics.map((topic) => ({
             nicheId: input.nicheId,
             userId: input.userId,
             topic: topic.topic,
-            priority: Math.max(1, 101 - topic.viralProbability),
+            priority: Math.max(1, 101 - topic.viralProbability - 10),
             source: "rapid_generator" as const,
             status: "queued" as const,
           }))
@@ -90,7 +93,7 @@ export const batchProductionService = {
         .from(nicheTopicQueue)
         .where(and(eq(nicheTopicQueue.userId, input.userId), eq(nicheTopicQueue.nicheId, input.nicheId), eq(nicheTopicQueue.status, "queued")))
         .orderBy(desc(nicheTopicQueue.createdAt))
-        .limit(100);
+        .limit(150);
     }
 
     const ranked = await decisionEngine.rankAndGateTopics({
@@ -103,11 +106,12 @@ export const batchProductionService = {
     const created: Array<{ projectId: number; jobId: number; variant: Variant; topic: string }> = [];
     for (const winner of winners) {
       const queueItem = queuedTopics.find((item) => item.topic === winner.topic);
+      const costMode = winner.budgetDecision.costMode;
       if (created.length < desired) {
-        created.push(await createQueuedProject({ userId: input.userId, nicheId: input.nicheId, topic: winner.topic, variant: "short", topicQueueId: queueItem?.id }));
+        created.push(await createQueuedProject({ userId: input.userId, nicheId: input.nicheId, topic: winner.topic, variant: "short", costMode, topicQueueId: queueItem?.id }));
       }
-      if (created.length < desired) {
-        created.push(await createQueuedProject({ userId: input.userId, nicheId: input.nicheId, topic: winner.topic, variant: "long", topicQueueId: queueItem?.id }));
+      if (created.length < desired && profile.productionPolicy.contentStyle !== "experimental") {
+        created.push(await createQueuedProject({ userId: input.userId, nicheId: input.nicheId, topic: winner.topic, variant: "long", costMode, topicQueueId: queueItem?.id }));
       }
     }
 
@@ -116,6 +120,7 @@ export const batchProductionService = {
       createdCount: created.length,
       created,
       queue: await getWorkflowQueueStats(),
+      productionPolicy: profile.productionPolicy,
     };
   },
 };

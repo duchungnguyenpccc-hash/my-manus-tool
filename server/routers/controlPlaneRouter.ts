@@ -6,6 +6,7 @@ import { trendResearchEngineService } from "../services/trendResearchEngineServi
 import { analyticsFeedbackService } from "../services/analyticsFeedbackService";
 import { topicMiningService } from "../services/topicMiningService";
 import { getCostSummaryByPeriod } from "../services/costTrackingService";
+import { objectiveEngine } from "../services/objectiveEngine";
 import { topicRapidGenerator } from "../services/topicRapidGenerator";
 import { decisionEngine } from "../services/decisionEngine";
 
@@ -113,18 +114,20 @@ export const controlPlaneRouter = router({
       const now = new Date();
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
       const cost = await getCostSummaryByPeriod(monthStart, now);
+      const profile = await objectiveEngine.getProfile(ctx.user.id, 0);
       return {
         userId: ctx.user.id,
         costPerVideo: Number(cost.costPerVideo.toFixed(2)),
         projectedMonthlyCost: Number(cost.projectedMonthlyCost.toFixed(2)),
         costPer1kViews: Number(((cost.totalCost / Math.max(1, cost.videosProcessed * 1000)) * 1000).toFixed(2)),
         viralScoreDistribution: {
-          high: 12,
-          medium: 24,
-          low: 64,
+          high: Math.round((1 - profile.productionPolicy.explorationRate) * 40),
+          medium: Math.round(profile.factorWeights.demand * 100),
+          low: Math.max(0, 100 - Math.round((1 - profile.productionPolicy.explorationRate) * 40) - Math.round(profile.factorWeights.demand * 100)),
         },
-        winRate: 18,
-        roiEstimate: 2.4,
+        winRate: profile.totalDecisions ? Math.round((profile.wins / profile.totalDecisions) * 100) : 0,
+        roiEstimate: Number(profile.budgetPolicy.lastKnownRoi.toFixed(2)),
+        autonomousMode: profile.autonomousMode,
       };
     }),
 });

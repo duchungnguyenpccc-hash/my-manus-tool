@@ -1,8 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { niches } from "../../drizzle/schema";
 import { getDb } from "../db";
-import { trendResearchEngineService } from "./trendResearchEngineService";
 import { decisionEngine } from "./decisionEngine";
+import { objectiveEngine } from "./objectiveEngine";
+import { trendResearchEngineService } from "./trendResearchEngineService";
 
 const CURIOSITY_HOOKS = [
   "How to",
@@ -22,7 +23,8 @@ const EMOTIONAL_TRIGGERS = [
 
 export const topicRapidGenerator = {
   async generateRapidTopics(input: { nicheId: number; userId: number; count?: number }) {
-    const count = Math.max(50, Math.min(100, input.count ?? 50));
+    const profile = await objectiveEngine.getProfile(input.userId, input.nicheId);
+    const count = Math.max(20, Math.min(100, input.count ?? profile.productionPolicy.replicationCount));
     const db = await getDb();
     if (!db) throw new Error("Database not available");
 
@@ -36,7 +38,7 @@ export const topicRapidGenerator = {
 
     const nicheName = niche[0].nicheName;
     const seeds = await trendResearchEngineService.fetchTrendSeeds(input.nicheId, input.userId);
-    const keywords = Array.from(new Set(seeds.map((seed) => seed.keyword).slice(0, 20)));
+    const keywords = Array.from(new Set(seeds.map((seed) => seed.keyword).slice(0, 30)));
     const generated = new Set<string>();
 
     for (const keyword of keywords) {
@@ -62,6 +64,7 @@ export const topicRapidGenerator = {
       selectedCount: ranked.selectedCount,
       rankedTopics: ranked.ranked,
       selectedTopics: ranked.selected,
+      productionPolicy: ranked.profile.productionPolicy,
     };
   },
 };

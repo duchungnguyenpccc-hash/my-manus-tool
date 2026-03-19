@@ -305,3 +305,30 @@ export const providerConfigurations = mysqlTable("provider_configurations", {
 
 export type ProviderConfiguration = typeof providerConfigurations.$inferSelect;
 export type InsertProviderConfiguration = typeof providerConfigurations.$inferInsert;
+
+/**
+ * Optimization profiles - persistent adaptive weights/state for self-optimizing growth engine
+ */
+export const optimizationProfiles = mysqlTable("optimization_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  nicheId: int("nicheId").notNull(),
+  objectiveWeights: json("objectiveWeights"),
+  factorWeights: json("factorWeights"),
+  performanceBaseline: json("performanceBaseline"),
+  budgetPolicy: json("budgetPolicy"),
+  productionPolicy: json("productionPolicy"),
+  titlePatternScores: json("titlePatternScores"),
+  hookPatternScores: json("hookPatternScores"),
+  blacklistedPatterns: json("blacklistedPatterns"),
+  autonomousMode: boolean("autonomousMode").default(true).notNull(),
+  totalDecisions: int("totalDecisions").default(0).notNull(),
+  wins: int("wins").default(0).notNull(),
+  losses: int("losses").default(0).notNull(),
+  lastLearningAt: timestamp("lastLearningAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type OptimizationProfile = typeof optimizationProfiles.$inferSelect;
+export type InsertOptimizationProfile = typeof optimizationProfiles.$inferInsert;

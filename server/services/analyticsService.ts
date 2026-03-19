@@ -1,8 +1,9 @@
 import { analyticsFeedbackService } from "./analyticsFeedbackService";
-import { getAudienceRetention } from "./youtubeAnalyticsService";
+import { decisionEngine } from "./decisionEngine";
+import { objectiveEngine } from "./objectiveEngine";
 import { topicMiningService } from "./topicMiningService";
 import { topicRapidGenerator } from "./topicRapidGenerator";
-import { decisionEngine } from "./decisionEngine";
+import { getAudienceRetention } from "./youtubeAnalyticsService";
 
 export const analyticsService = {
   async fetchStoreAndLearn(input: { projectId: number; userId: number; nicheId?: number; youtubeVideoId?: string }) {
@@ -15,36 +16,62 @@ export const analyticsService = {
       ? await analyticsFeedbackService.getTopicLearningSnapshot(input.nicheId, input.userId)
       : null;
 
-    const winLoseTag =
-      metrics.views >= 10000 || metrics.ctr >= 6 || retention.averageRetention >= 55 ? "WIN" : "LOSE";
+    const learningResult = input.nicheId
+      ? await objectiveEngine.recordOutcome({
+          userId: input.userId,
+          nicheId: input.nicheId,
+          topic: metrics.title,
+          title: metrics.title,
+          hook: metrics.title,
+          metrics: {
+            views: metrics.views,
+            watchTimeMinutes: metrics.watchTime,
+            revenue: metrics.revenue,
+            ctr: metrics.ctr,
+            retention: retention.averageRetention,
+          },
+          factorSignals: {
+            ctr: Math.min(1, metrics.ctr / 10),
+            retention: Math.min(1, retention.averageRetention / 100),
+            demand: Math.min(1, metrics.views / Math.max(1, learningSnapshot?.averageViews ?? 10000)),
+          },
+        })
+      : null;
 
-    let scalingAction: { triggered: boolean; reason: string; inserted?: number } | null = null;
-    if (winLoseTag === "WIN" && input.nicheId) {
+    const winLoseTag = learningResult?.status === "WIN" ? "WIN" : "LOSE";
+
+    let scalingAction: { triggered: boolean; reason: string; inserted?: number; replicationCount?: number; videosPerDay?: number } | null = null;
+    if (winLoseTag === "WIN" && input.nicheId && learningResult) {
+      const replicationCount = Math.max(20, Math.min(50, learningResult.profile.productionPolicy.replicationCount));
       const rapid = await topicRapidGenerator.generateRapidTopics({
         nicheId: input.nicheId,
         userId: input.userId,
-        count: 100,
+        count: replicationCount,
       });
       const similar = await topicMiningService.mineAndQueueTopics({
         nicheId: input.nicheId,
         userId: input.userId,
-        limit: Math.max(10, Math.min(20, rapid.selectedTopics.length)),
+        limit: Math.max(20, Math.min(50, rapid.selectedTopics.length)),
+        boostPriority: 20,
+        source: "win_replication",
       });
       scalingAction = {
         triggered: true,
-        reason: "Winning video exceeded speed-to-scale threshold.",
+        reason: "Winning pattern replicated aggressively and production rate increased.",
         inserted: similar.inserted,
+        replicationCount,
+        videosPerDay: learningResult.profile.productionPolicy.videosPerDay,
       };
     } else if (winLoseTag === "LOSE" && input.nicheId) {
       await decisionEngine.recordFailurePattern({
         userId: input.userId,
         nicheId: input.nicheId,
         topic: metrics.title,
-        reason: "Below retention/CTR/view threshold",
+        reason: "Objective function underperformed rolling baseline",
       });
       scalingAction = {
         triggered: false,
-        reason: "Pattern marked as fail and blocked from future replication.",
+        reason: "Dynamic kill system marked this pattern as a candidate for blacklist.",
       };
     }
 
@@ -53,6 +80,7 @@ export const analyticsService = {
       retention: retention.averageRetention,
       tag: winLoseTag,
       learningSnapshot,
+      learningResult,
       scalingAction,
     };
   },

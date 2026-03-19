@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { ENV } from "./env";
 import { serveStatic, setupVite } from "./vite";
 import { bootstrapWorkflowWorker } from "../workers/workflowWorker";
+import { autonomousGrowthService } from "../services/autonomousGrowthService";
 import { strategyEngine } from "../services/strategyEngine";
 import { batchProductionService } from "../services/batchProductionService";
 
@@ -44,6 +45,7 @@ async function startServer() {
     res.status(200).json({
       status: "ok",
       service: "faceless-pov-ai-machine",
+      autonomousMode: "active",
       uptimeSeconds: Math.round(startedAt),
       database: db ? "connected" : "unavailable",
       timestamp: new Date().toISOString(),
@@ -132,6 +134,7 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     bootstrapWorkflowWorker();
+    autonomousGrowthService.start();
   });
 }
 
