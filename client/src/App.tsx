@@ -1,7 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -19,12 +20,28 @@ import AdvancedSettingsPage from "./pages/AdvancedSettings";
 import { AutoOptimizationDashboard } from "./pages/AutoOptimizationDashboard";
 import APIProviderSettings from "./pages/APIProviderSettings";
 import { Niches } from "./pages/Niches";
+import TopicAnalyzer from "./pages/TopicAnalyzer";
+
+function RedirectTo({ path }: { path: string }) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation(path, { replace: true });
+  }, [path, setLocation]);
+
+  return null;
+}
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"}>
+        <RedirectTo path="/dashboard" />
+      </Route>
+      <Route path={"/app-auth"}>
+        <RedirectTo path="/dashboard" />
+      </Route>
       <Route path={"/dashboard"} component={DashboardPage} />
       <Route path={"/settings"} component={Settings} />
       <Route path={"/schedules"} component={ScheduleManagement} />
@@ -38,7 +55,8 @@ function Router() {
       <Route path="/auto-optimization" component={AutoOptimizationDashboard} />
       <Route path="/api-providers" component={APIProviderSettings} />
       <Route path="/niches" component={Niches} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/topic-analyzer" component={TopicAnalyzer} />
+      <Route path={"/home"} component={Home} />
       <Route path={"/project/:id"} component={ProjectDetails} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

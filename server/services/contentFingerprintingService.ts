@@ -30,6 +30,23 @@ export interface ComplianceCheckResult {
   recommendations: string[];
 }
 
+function normalizeText(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2);
+}
+
+export function calculateSemanticSimilarity(a: string, b: string): number {
+  const aTokens = new Set(normalizeText(a));
+  const bTokens = new Set(normalizeText(b));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+  const overlap = Array.from(aTokens).filter((token) => bTokens.has(token)).length;
+  const union = new Set(Array.from(aTokens).concat(Array.from(bTokens))).size;
+  return Math.round((overlap / union) * 100);
+}
+
 /**
  * Compute perceptual hash for video content
  * Uses frame sampling to detect visual similarity
@@ -40,7 +57,7 @@ export async function computePerceptualHash(videoUrl: string): Promise<string> {
   const crypto = await import("crypto");
   const hash = crypto
     .createHash("sha256")
-    .update(videoUrl + Date.now())
+    .update(videoUrl.trim().toLowerCase())
     .digest("hex");
   return hash;
 }
@@ -72,18 +89,18 @@ export async function checkContentDuplicate(
   // 2. Check against existing videos in database
   const existingVideos: any[] = [
     // Mock data - in production would query from database
-    { id: "vid-1", content_hash: "hash1", script_hash: "script1" },
-    { id: "vid-2", content_hash: "hash2", script_hash: "script2" },
+    { id: "vid-1", content_url: "https://example.com/video.mp4", script: "Test script content" },
+    { id: "vid-2", content_url: "https://example.com/another-video.mp4", script: "AI explained for beginners with practical examples" },
   ];
 
   const duplicates: Array<{ videoId: string; similarity: number }> = [];
   let maxSimilarity = 0;
 
   for (const video of existingVideos) {
-    // Simple hash comparison - in production would use more sophisticated algorithms
-    const contentSimilarity =
-      contentHash === video.content_hash ? 100 : Math.random() * 30;
-    const scriptSimilarity = scriptHash === video.script_hash ? 100 : Math.random() * 40;
+    const existingContentHash = await computePerceptualHash(video.content_url);
+    const existingScriptHash = await computeScriptHash(video.script);
+    const contentSimilarity = contentHash === existingContentHash ? 100 : calculateSemanticSimilarity(videoUrl, video.content_url);
+    const scriptSimilarity = scriptHash === existingScriptHash ? 100 : calculateSemanticSimilarity(script, video.script);
 
     const avgSimilarity = (contentSimilarity + scriptSimilarity) / 2;
 
@@ -133,13 +150,10 @@ export async function checkScriptSimilarity(
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
 }> {
   // Mock implementation - in production would compare with YouTube trending videos
-  const scriptHash = await computeScriptHash(script);
-
-  // Simulate checking against trending videos
   const trendingVideos = [
-    { title: "Top AI Trends 2024", similarity: Math.random() * 50 },
-    { title: "How AI Changed Everything", similarity: Math.random() * 45 },
-    { title: "AI Explained for Beginners", similarity: Math.random() * 40 },
+    { title: `Top ${category} trends explained`, similarity: calculateSemanticSimilarity(script, `Top ${category} trends explained`) },
+    { title: `How ${category} changed everything`, similarity: calculateSemanticSimilarity(script, `How ${category} changed everything`) },
+    { title: `${category} explained for beginners`, similarity: calculateSemanticSimilarity(script, `${category} explained for beginners`) },
   ];
 
   const maxSimilarity = Math.max(...trendingVideos.map((v) => v.similarity));
