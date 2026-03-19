@@ -150,6 +150,7 @@ export async function simulateViralPotential(input: {
   threshold?: number;
 }): Promise<ViralPrediction> {
   const threshold = input.threshold ?? Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65);
+  const weights = getSimulatorWeights();
 
   const ctr = predictTitleCTR(input.title || input.topic);
   const retention = predictRetention({ hook: input.hook, structure: input.structure, topic: input.topic });

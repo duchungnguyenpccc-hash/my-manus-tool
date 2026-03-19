@@ -3,6 +3,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { campaignManagerService } from "../services/campaignManagerService";
 import { aiTopicGeneratorService } from "../services/aiTopicGeneratorService";
 import { trendResearchEngineService } from "../services/trendResearchEngineService";
+import { analyticsFeedbackService } from "../services/analyticsFeedbackService";
 
 export const controlPlaneRouter = router({
   createCampaign: protectedProcedure

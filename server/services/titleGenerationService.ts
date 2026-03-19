@@ -9,6 +9,25 @@ export interface TitleGenerationResult {
   keywords: string[];
 }
 
+const TITLE_POWER_WORDS = ["secret", "mistake", "truth", "best", "fast", "easy", "guide", "warning", "viral"];
+
+export function scoreTitleCTRPotential(title: string): number {
+  const normalized = title.toLowerCase().trim();
+  let score = 30;
+  if (normalized.length >= 35 && normalized.length <= 70) score += 20;
+  if (/\d/.test(normalized)) score += 8;
+  if (/\?/.test(normalized)) score += 8;
+  if (/(how|why|what|vs|without|before)/.test(normalized)) score += 8;
+  score += TITLE_POWER_WORDS.filter((word) => normalized.includes(word)).length * 5;
+  return Math.max(0, Math.min(100, score));
+}
+
+export function selectBestTitleVariation<T extends TitleGenerationResult>(titles: T[]): T {
+  return titles.reduce((best, current) =>
+    scoreTitleCTRPotential(current.mainTitle) > scoreTitleCTRPotential(best.mainTitle) ? current : best
+  );
+}
+
 /**
  * Title Generation Service
  * Generates SEO-optimized titles and descriptions for video content
