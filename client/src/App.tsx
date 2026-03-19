@@ -32,6 +32,16 @@ function RedirectTo({ path }: { path: string }) {
   return null;
 }
 
+function RedirectTo({ path }: { path: string }) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation(path, { replace: true });
+  }, [path, setLocation]);
+
+  return null;
+}
+
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
@@ -55,7 +65,6 @@ function Router() {
       <Route path="/auto-optimization" component={AutoOptimizationDashboard} />
       <Route path="/api-providers" component={APIProviderSettings} />
       <Route path="/niches" component={Niches} />
-      <Route path="/topic-analyzer" component={TopicAnalyzer} />
       <Route path={"/home"} component={Home} />
       <Route path={"/project/:id"} component={ProjectDetails} />
       <Route path={"/404"} component={NotFound} />

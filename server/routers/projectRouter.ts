@@ -5,20 +5,6 @@ import { nicheTopicQueue, videoProjects, workflowTasks } from "../../drizzle/sch
 import { eq, and, desc, asc } from "drizzle-orm";
 import { enqueueWorkflowJob, getWorkflowQueueStats } from "../services/workflowDispatchService";
 import { scriptVersioningService } from "../services/scriptVersioningService";
-import { rankTopicsByViralPotential, simulateViralPotential } from "../services/youtubeAlgorithmSimulatorService";
-
-const VIRAL_THRESHOLD = Number(process.env.VIRAL_SCORE_THRESHOLD ?? 65);
-const VIRAL_GATE_TOP_N = Number(process.env.VIRAL_GATE_TOP_N ?? 3);
-
-async function assertViralGate(topic: string) {
-  const prediction = await simulateViralPotential({ topic, title: topic, threshold: VIRAL_THRESHOLD });
-  if (prediction.decision !== "allow") {
-    throw new Error(
-      `Video bị chặn: viral score ${prediction.viralScore}/100 thấp hơn ngưỡng ${prediction.threshold}/100`
-    );
-  }
-  return prediction;
-}
 
 async function createProjectAndQueue(params: {
   userId: number;
@@ -107,7 +93,6 @@ export const projectRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await assertViralGate(input.topic);
       return createProjectAndQueue({
         userId: ctx.user.id,
         topic: input.topic,
@@ -146,19 +131,25 @@ export const projectRouter = router({
         .orderBy(asc(nicheTopicQueue.priority), asc(nicheTopicQueue.createdAt))
         .limit(20);
 
-      if (!queuedTopics[0]) throw new Error("No queued topics available for this niche");
+      let topicItem = queuedTopics[0];
+      if (!topicItem) throw new Error("No queued topics available for this niche");
 
-      const gate = await rankTopicsByViralPotential({
-        topics: queuedTopics.map((item) => ({ topic: item.topic })),
-        threshold: VIRAL_THRESHOLD,
-        topN: VIRAL_GATE_TOP_N,
-      });
-
-      const best = gate.selected[0];
+      // Only allow high viral score topics into production pipeline.
+      const scored = [] as Array<{ id: number; score: number; topic: string }>;
+      for (const item of queuedTopics) {
+        const prediction = await simulateViralPotential({ topic: item.topic, title: item.topic, threshold: VIRAL_THRESHOLD });
+        scored.push({ id: item.id, score: prediction.viralScore, topic: item.topic });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored.find((s) => s.score >= VIRAL_THRESHOLD);
       if (!best) {
         throw new Error(`Không có topic nào đạt viral threshold ${VIRAL_THRESHOLD}`);
       }
-      const topicItem = queuedTopics.find((q) => q.topic === best.topic)!;
+      topicItem = queuedTopics.find((q) => q.id === best.id)!;
+        .limit(1);
+
+      const topicItem = queuedTopics[0];
+      if (!topicItem) throw new Error("No queued topics available for this niche");
 
       return createProjectAndQueue({
         userId: ctx.user.id,
@@ -197,18 +188,9 @@ export const projectRouter = router({
         ? allQueued.filter((q) => q.nicheId === input.nicheId)
         : allQueued;
 
-      const rows = filtered.slice(0, Math.max(input.limit, VIRAL_GATE_TOP_N * 2));
-      const gate = await rankTopicsByViralPotential({
-        topics: rows.map((row) => ({ topic: row.topic })),
-        threshold: VIRAL_THRESHOLD,
-        topN: input.limit,
-      });
-      const allowedTopics = new Set(gate.selected.map((item) => item.topic));
+      const rows = filtered.slice(0, input.limit);
       const created = [] as Array<{ topicQueueId: number; projectId: number; jobId: number }>;
       for (const row of rows) {
-        if (!allowedTopics.has(row.topic)) {
-          continue;
-        }
         const result = await createProjectAndQueue({
           userId: ctx.user.id,
           topic: row.topic,
@@ -227,11 +209,6 @@ export const projectRouter = router({
         success: true,
         createdCount: created.length,
         created,
-        threshold: VIRAL_THRESHOLD,
-        selectedTopics: gate.selected.map((item) => ({
-          topic: item.topic,
-          viralProbability: item.scores.viralProbability,
-        })),
       };
     }),
 

@@ -7,23 +7,11 @@ import {
   analyzeContentPerformance,
 } from "./trendResearchService";
 import axios from "axios";
-import { calculateTopicNoveltyScore, rankTopicsByViralPotential } from "./youtubeAlgorithmSimulatorService";
 
 export type TrendSeed = {
   keyword: string;
   score: number;
-  source: "google_trends" | "youtube_trending" | "historical_performance" | "reddit" | "youtube_suggest" | "google_autocomplete";
-};
-
-export type RankedTopicIdea = {
-  topic: string;
-  source: TrendSeed["source"];
-  searchDemand: number;
-  competition: number;
-  novelty: number;
-  viralScore: number;
-  monetizationFit: number;
-  priority: number;
+  source: "google_trends" | "youtube_trending" | "historical_performance";
 };
 
 const fallbackIdeas = [
@@ -47,7 +35,7 @@ export const trendResearchEngineService = {
       return posts.map((p: any) => ({
         keyword: String(p?.data?.title ?? ""),
         score: Number(p?.data?.score ?? 0),
-        source: "reddit" as const,
+        source: "historical_performance" as const,
       }));
     } catch {
       return [];
@@ -61,42 +49,6 @@ export const trendResearchEngineService = {
       { keyword: `${nicheKeyword} breaking update`, score: 60, source: "historical_performance" },
       { keyword: `${nicheKeyword} tips`, score: 55, source: "historical_performance" },
     ];
-  },
-
-  async fetchYoutubeSuggestions(keyword: string): Promise<TrendSeed[]> {
-    try {
-      const response = await axios.get("https://suggestqueries.google.com/complete/search", {
-        params: { client: "firefox", ds: "yt", q: keyword },
-        timeout: 8000,
-      });
-
-      const suggestions = Array.isArray(response.data?.[1]) ? response.data[1] : [];
-      return suggestions.slice(0, 10).map((item: string, index: number) => ({
-        keyword: item,
-        score: Math.max(30, 100 - index * 8),
-        source: "youtube_suggest" as const,
-      }));
-    } catch {
-      return [];
-    }
-  },
-
-  async fetchGoogleAutocomplete(keyword: string): Promise<TrendSeed[]> {
-    try {
-      const response = await axios.get("https://suggestqueries.google.com/complete/search", {
-        params: { client: "firefox", q: keyword },
-        timeout: 8000,
-      });
-
-      const suggestions = Array.isArray(response.data?.[1]) ? response.data[1] : [];
-      return suggestions.slice(0, 10).map((item: string, index: number) => ({
-        keyword: item,
-        score: Math.max(25, 95 - index * 7),
-        source: "google_autocomplete" as const,
-      }));
-    } catch {
-      return [];
-    }
   },
 
   async fetchTrendSeeds(nicheId: number, userId: number): Promise<TrendSeed[]> {
@@ -114,7 +66,7 @@ export const trendResearchEngineService = {
     }
 
     const category = niche[0].category || niche[0].nicheName;
-    const [trendTopics, youtubeTrends, recentProjects, redditTrends, twitterTrends, youtubeSuggestions, googleAutocomplete] = await Promise.all([
+    const [trendTopics, youtubeTrends, recentProjects, redditTrends, twitterTrends] = await Promise.all([
       getTrendingTopics(category, "en-US"),
       getYouTubeTrendingVideos(category, 10),
       db
@@ -125,8 +77,6 @@ export const trendResearchEngineService = {
         .limit(30),
       this.fetchRedditTrends(category),
       this.fetchTwitterTrends(category),
-      this.fetchYoutubeSuggestions(category),
-      this.fetchGoogleAutocomplete(category),
     ]);
 
     const seeds: TrendSeed[] = [];
@@ -151,8 +101,6 @@ export const trendResearchEngineService = {
 
     seeds.push(...redditTrends);
     seeds.push(...twitterTrends);
-    seeds.push(...youtubeSuggestions);
-    seeds.push(...googleAutocomplete);
 
     if (!seeds.length) {
       return fallbackIdeas.map((idea, idx) => ({
@@ -167,65 +115,12 @@ export const trendResearchEngineService = {
 
   async generateTopicIdeasForNiche(nicheId: number, userId: number, limit = 10) {
     const seeds = await this.fetchTrendSeeds(nicheId, userId);
-    const ranked = await this.rankTopicIdeas(
-      seeds.map((seed) => ({ topic: seed.keyword, source: seed.source, demandSeed: seed.score })),
-      limit
-    );
-
-    return ranked.map((seed) => ({
-      topic: seed.topic,
-      priority: seed.priority,
+    return seeds.slice(0, limit).map((seed, index) => ({
+      topic: seed.keyword,
+      priority: Math.max(1, 100 - index * 5),
       source: seed.source,
-      score: seed.viralScore,
-      ranking: {
-        searchDemand: seed.searchDemand,
-        competition: seed.competition,
-        novelty: seed.novelty,
-        monetizationFit: seed.monetizationFit,
-      },
+      score: seed.score,
     }));
-  },
-
-  async rankTopicIdeas(
-    ideas: Array<{ topic: string; source: TrendSeed["source"]; demandSeed?: number }>,
-    limit = 10
-  ): Promise<RankedTopicIdea[]> {
-    const rankedViral = await rankTopicsByViralPotential({
-      topics: ideas.slice(0, 20).map((idea) => ({ topic: idea.topic })),
-      topN: Math.min(limit, Number(process.env.VIRAL_GATE_TOP_N ?? limit)),
-    });
-
-    const existingTopics = ideas.map((idea) => idea.topic);
-
-    const ranked = ideas.map((idea) => {
-      const viral = rankedViral.ranked.find((item) => item.topic === idea.topic);
-      const novelty = calculateTopicNoveltyScore(
-        idea.topic,
-        existingTopics.filter((topic) => topic !== idea.topic)
-      );
-      const monetizationFit = Math.min(100, Math.round((viral?.scores.ctr ?? 60) * 0.4 + (viral?.scores.demand ?? 60) * 0.6));
-      const competition = viral?.scores.competition ?? 50;
-      const searchDemand = Math.min(100, Math.round((idea.demandSeed ?? 50) * 0.45 + (viral?.scores.demand ?? 50) * 0.55));
-      const viralScore = Math.min(
-        100,
-        Math.round((viral?.scores.viralProbability ?? 50) * 0.45 + searchDemand * 0.25 + novelty * 0.2 + monetizationFit * 0.1)
-      );
-
-      return {
-        topic: idea.topic,
-        source: idea.source,
-        searchDemand,
-        competition,
-        novelty,
-        monetizationFit,
-        viralScore,
-        priority: Math.max(1, 101 - viralScore),
-      } satisfies RankedTopicIdea;
-    });
-
-    return ranked
-      .sort((a, b) => b.viralScore - a.viralScore || b.novelty - a.novelty)
-      .slice(0, limit);
   },
 
   async pushIdeasToNicheQueue(

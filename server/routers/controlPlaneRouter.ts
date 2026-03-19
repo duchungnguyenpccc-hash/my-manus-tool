@@ -12,9 +12,6 @@ export const controlPlaneRouter = router({
         nicheId: z.number(),
         name: z.string().min(3),
         strategy: z.record(z.string(), z.unknown()).optional(),
-        postingFrequency: z.number().int().min(1).max(30).optional(),
-        monthlyBudget: z.number().min(0).optional(),
-        viralThreshold: z.number().min(0).max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -22,12 +19,7 @@ export const controlPlaneRouter = router({
         userId: ctx.user.id,
         nicheId: input.nicheId,
         name: input.name,
-        strategy: {
-          ...(input.strategy ?? {}),
-          postingFrequency: input.postingFrequency,
-          monthlyBudget: input.monthlyBudget,
-          viralThreshold: input.viralThreshold,
-        },
+        strategy: input.strategy,
       });
     }),
 
@@ -56,14 +48,8 @@ export const controlPlaneRouter = router({
       const queued = await trendResearchEngineService.pushIdeasToNicheQueue(
         input.nicheId,
         ctx.user.id,
-        topics.topics.map((t) => ({ topic: t.topic, priority: 101 - Math.min(100, t.score), source: "ai_generator" }))
+        topics.map((t) => ({ topic: t.topic, priority: 101 - Math.min(100, t.score), source: "ai_generator" }))
       );
-      return { queued, generated: topics.candidatesGenerated, selectedTopics: topics.selectedTopics };
-    }),
-
-  getLearningSnapshot: protectedProcedure
-    .input(z.object({ nicheId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      return analyticsFeedbackService.getTopicLearningSnapshot(input.nicheId, ctx.user.id);
+      return { queued, generated: topics.length };
     }),
 });
