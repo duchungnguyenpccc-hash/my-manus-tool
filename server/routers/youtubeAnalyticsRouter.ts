@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as youtubeAnalyticsService from "../services/youtubeAnalyticsService";
 import * as multiChannelService from "../services/multiChannelService";
 import * as audienceSegmentationService from "../services/audienceSegmentationService";
+import { analyticsFeedbackService } from "../services/analyticsFeedbackService";
 
 export const youtubeAnalyticsRouter = router({
   // YouTube Analytics Procedures
@@ -78,6 +79,19 @@ export const youtubeAnalyticsRouter = router({
       return await youtubeAnalyticsService.getWatchTimeAnalytics(input.channelId);
     }),
 
+
+
+  captureProjectFeedback: protectedProcedure
+    .input(z.object({ projectId: z.number() }))
+    .mutation(async ({ ctx, input }: any) => {
+      return analyticsFeedbackService.captureVideoMetrics(input.projectId, Number(ctx.user.id));
+    }),
+
+  getNicheFeedback: protectedProcedure
+    .input(z.object({ nicheId: z.number() }))
+    .query(async ({ ctx, input }: any) => {
+      return analyticsFeedbackService.getNicheFeedback(input.nicheId, Number(ctx.user.id));
+    }),
   // Multi-Channel Management Procedures
   getUserChannels: protectedProcedure.query(async ({ ctx }: any) => {
     return await multiChannelService.getUserChannels(String(ctx.user.id));
