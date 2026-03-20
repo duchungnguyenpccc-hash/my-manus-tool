@@ -2,7 +2,7 @@ import { CronJob } from "cron";
 import { getDb } from "../db";
 import { videoProjects } from "../../drizzle/schema";
 import { readTopicsFromSheet } from "./googleSheetsService";
-import { executeCompleteWorkflow } from "./improvedWorkflowOrchestrator";
+import { enqueueWorkflowJob } from "./workflowDispatchService";
 
 /**
  * Schedule Triggers Service
@@ -126,55 +126,49 @@ async function executeScheduledWorkflow(config: ScheduleConfig): Promise<void> {
       throw new Error("Database not available");
     }
 
-    const projectIds: number[] = [];
+    const workflowJobs: Array<{ projectId: number; topic: string }> = [];
 
     for (const topicItem of topics) {
       const topicText = typeof topicItem === "string" ? topicItem : (topicItem as any).topic;
       const titleText = typeof topicItem === "string" ? `Video from ${topicItem}` : `Video from ${(topicItem as any).topic}`;
       
       try {
-        await db.insert(videoProjects).values({
+        const inserted: any = await db.insert(videoProjects).values({
           userId: config.userId,
           title: titleText,
           topic: topicText,
           status: "processing",
-          config: JSON.stringify(config.workflowConfig),
+          config: config.workflowConfig as any,
         });
 
-        // Track project creation
-        projectIds.push(Math.floor(Math.random() * 1000000));
+        const projectId = Number(inserted?.[0]?.insertId ?? inserted?.insertId ?? 0);
+        if (projectId) {
+          workflowJobs.push({ projectId, topic: topicText });
+        }
       } catch (error) {
         console.error(`[Schedule Triggers] Error creating project for topic ${topicText}:`, error);
       }
     }
 
-    // Prepare workflow config with topic
-    const topicForWorkflow = typeof topics[0] === "string" ? topics[0] : (topics[0] as any)?.topic || "default";
-    const workflowConfigWithTopic = {
-      ...config.workflowConfig,
-      topic: topicForWorkflow,
-    };
+    console.log(`[Schedule Triggers] Created ${workflowJobs.length} projects`);
 
-    console.log(`[Schedule Triggers] Created ${projectIds.length} projects`);
-
-    // Step 3: Execute workflows with concurrency control
-    const maxConcurrent = config.maxConcurrentWorkflows || 1;
-    for (let i = 0; i < projectIds.length; i += maxConcurrent) {
-      const batch = projectIds.slice(i, i + maxConcurrent);
-      const batchPromises = batch.map((projectId) =>
-        executeCompleteWorkflow(projectId, config.userId, workflowConfigWithTopic as any)
-          .then(() => {
-            console.log(`[Schedule Triggers] Workflow completed for project ${projectId}`);
-          })
-          .catch((error: any) => {
-            console.error(`[Schedule Triggers] Workflow failed for project ${projectId}:`, error);
-          })
-      );
-
-      await Promise.all(batchPromises);
+    // Step 3: Enqueue workflows to durable queue
+    for (const { projectId, topic } of workflowJobs) {
+      await enqueueWorkflowJob({
+        userId: config.userId,
+        projectId,
+        payload: {
+          topic,
+          sceneCount: config.workflowConfig.sceneCount,
+          duration: config.workflowConfig.duration,
+          voiceId: config.workflowConfig.voiceId,
+          imageModel: config.workflowConfig.imageModel === "flux1-schnell" ? "flux" : "qwen",
+          videoModel: config.workflowConfig.videoModel === "kling-image-to-video" ? "kling" : "veo3",
+        },
+      });
     }
 
-    console.log(`[Schedule Triggers] All workflows completed`);
+    console.log(`[Schedule Triggers] Enqueued ${workflowJobs.length} workflows`);
   } catch (error) {
     console.error(`[Schedule Triggers] Error executing scheduled workflow:`, error);
   }

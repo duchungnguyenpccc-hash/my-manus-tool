@@ -1,0 +1,133 @@
+import { and, eq } from "drizzle-orm";
+import { nicheTopicQueue, topicCandidates } from "../../drizzle/schema";
+import { getDb } from "../db";
+import { budgetEngine } from "./budgetEngine";
+import { objectiveEngine } from "./objectiveEngine";
+import { patternEngine } from "./patternEngine";
+import { strategyEngine, type StrategyTopicScore } from "./strategyEngine";
+import { calculateTrendMomentum, getYouTubeTrendingVideos } from "./trendResearchService";
+
+export type DecisionTopicScore = StrategyTopicScore & {
+  adaptiveScore: number;
+  patternScore: number;
+  trendVelocity: number;
+  trendFreshness: number;
+  budgetDecision: Awaited<ReturnType<typeof budgetEngine.allocate>>;
+  sourceEvidence: {
+    competingVideos: number;
+    medianViews: number;
+    momentumScore: number;
+  };
+  factorWeights: { ctr: number; retention: number; demand: number };
+  decisionContext: {
+    factorSignals: { ctr: number; retention: number; demand: number };
+    blacklistedPatterns: string[];
+    winningPatternMatches: ReturnType<typeof patternEngine.scorePattern>["winningMatches"];
+    losingPatternMatches: ReturnType<typeof patternEngine.scorePattern>["losingMatches"];
+  };
+  status: "approved" | "discarded" | "blocked";
+};
+
+async function getHistoricalPatterns(userId: number, nicheId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const [rejected, queued] = await Promise.all([
+    db.select().from(topicCandidates).where(and(eq(topicCandidates.userId, userId), eq(topicCandidates.nicheId, nicheId), eq(topicCandidates.status, "rejected"))),
+    db.select().from(nicheTopicQueue).where(and(eq(nicheTopicQueue.userId, userId), eq(nicheTopicQueue.nicheId, nicheId))),
+  ]);
+  return [...rejected.map((row) => row.topic), ...queued.map((row) => row.topic)];
+}
+
+function toTerms(topic: string) {
+  return topic.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((term) => term.length > 3);
+}
+
+export const decisionEngine = {
+  async evaluateTopic(input: { userId: number; nicheId: number; topic: string; title?: string; monthlyBudget?: number; dailyVideoQuota?: number }): Promise<DecisionTopicScore> {
+    const [historical, profile] = await Promise.all([getHistoricalPatterns(input.userId, input.nicheId), objectiveEngine.getProfile(input.userId, input.nicheId)]);
+    const strategy = await strategyEngine.scoreTopic({ topic: input.topic, title: input.title, historicalTopics: historical });
+    const trending = await getYouTubeTrendingVideos("all", 20);
+    const terms = toTerms(input.topic);
+    const related = trending.filter((video) => terms.some((term) => video.title.toLowerCase().includes(term)));
+    const medianViews = related.length > 0 ? related.map((video) => video.views).sort((a, b) => a - b)[Math.floor(related.length / 2)] : 0;
+    const newest = related[0]?.uploadedAt ?? new Date().toISOString();
+    const trendMomentum = calculateTrendMomentum(Math.max(medianViews, 1000), newest);
+    const patternSignal = patternEngine.scorePattern({ profile, nicheId: input.nicheId, topic: input.topic, title: input.title, hook: input.title });
+    const blacklistedPatterns = profile.blacklistedPatterns.filter((pattern) => input.topic.toLowerCase().includes(pattern));
+
+    const factorSignals = {
+      ctr: Math.min(1, strategy.predictedCTR / 10),
+      retention: Math.min(1, strategy.predictedRetention / 100),
+      demand: Math.min(1, (strategy.demandScore + trendMomentum.velocityScore + trendMomentum.freshnessScore) / 300),
+    };
+
+    const baseAdaptive = factorSignals.ctr * profile.factorWeights.ctr + factorSignals.retention * profile.factorWeights.retention + factorSignals.demand * profile.factorWeights.demand;
+    const adaptiveScore = Number(clamp(baseAdaptive + patternSignal.netScore * 0.12 + trendMomentum.momentumScore / 500, 0, 1.5).toFixed(3));
+    const adaptiveThreshold = Math.max(0.48, Math.min(0.95, profile.performanceBaseline.averageObjectiveScore * 0.52 + (profile.budgetPolicy.nichePriority - 1) * 0.08));
+
+    const budgetDecision = await budgetEngine.allocate({
+      userId: input.userId,
+      nicheId: input.nicheId,
+      viralScore: strategy.viralProbability,
+      estimatedViews: medianViews || profile.performanceBaseline.averageViews,
+      estimatedRevenue: profile.budgetPolicy.estimatedRevenuePerVideo * Math.max(0.6, adaptiveScore),
+      costPerVideo: profile.budgetPolicy.targetCostPerVideo / Math.max(0.75, profile.budgetPolicy.nichePriority),
+      profile,
+    });
+
+    const status =
+      historical.some((topic) => topic.toLowerCase() === input.topic.toLowerCase()) ||
+      blacklistedPatterns.length > 0 ||
+      strategy.noveltyScore < 20 ||
+      trendMomentum.freshnessScore < 15
+        ? "blocked"
+        : adaptiveScore >= adaptiveThreshold
+          ? "approved"
+          : "discarded";
+
+    return {
+      ...strategy,
+      adaptiveScore,
+      patternScore: patternSignal.netScore,
+      trendVelocity: trendMomentum.velocityScore,
+      trendFreshness: trendMomentum.freshnessScore,
+      factorWeights: profile.factorWeights,
+      budgetDecision,
+      sourceEvidence: { competingVideos: related.length, medianViews, momentumScore: trendMomentum.momentumScore },
+      decisionContext: {
+        factorSignals,
+        blacklistedPatterns,
+        winningPatternMatches: patternSignal.winningMatches,
+        losingPatternMatches: patternSignal.losingMatches,
+      },
+      status,
+    };
+  },
+
+  async rankAndGateTopics(input: { userId: number; nicheId: number; topics: Array<{ topic: string; title?: string }>; monthlyBudget?: number; dailyVideoQuota?: number }) {
+    const profile = await objectiveEngine.getProfile(input.userId, input.nicheId);
+    const evaluations = await Promise.all(input.topics.map((topic) => this.evaluateTopic({ userId: input.userId, nicheId: input.nicheId, topic: topic.topic, title: topic.title, monthlyBudget: input.monthlyBudget, dailyVideoQuota: input.dailyVideoQuota })));
+    const ranked = evaluations.sort((a, b) => b.adaptiveScore - a.adaptiveScore || b.patternScore - a.patternScore || b.viralProbability - a.viralProbability);
+    const approved = ranked.filter((item) => item.status === "approved");
+    const keepCount = Math.max(1, Math.ceil(ranked.length * Math.max(0.08, 1 - profile.productionPolicy.explorationRate) * 0.12));
+    const selected = approved.slice(0, keepCount);
+    return { generated: ranked.length, selectedCount: selected.length, discardCount: ranked.length - selected.length, ranked, selected, profile };
+  },
+
+  async recordFailurePattern(input: { userId: number; nicheId: number; topic: string; reason: string }) {
+    const db = await getDb();
+    if (!db) return { success: false };
+    await db.insert(topicCandidates).values({ userId: input.userId, nicheId: input.nicheId, topic: input.topic, titleSuggestion: input.topic.slice(0, 255), hookSuggestion: input.reason, score: 0, source: "decision_engine", status: "rejected", metadata: { reason: input.reason, blocked: true } });
+    const profile = await objectiveEngine.getProfile(input.userId, input.nicheId);
+    objectiveEngine.updateBlacklist(profile, input.topic, false);
+    patternEngine.learnFromOutcome({ profile, nicheId: input.nicheId, topic: input.topic, title: input.topic, hook: input.reason, won: false, objectiveScore: 0.8 });
+    profile.losses += 1;
+    profile.totalDecisions += 1;
+    await objectiveEngine.saveProfile(profile);
+    return { success: true, blacklistedPatterns: profile.blacklistedPatterns };
+  },
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
