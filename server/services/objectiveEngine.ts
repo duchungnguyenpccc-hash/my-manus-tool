@@ -321,6 +321,23 @@ export const objectiveEngine = {
     return profiles;
   },
 
+  async getDominancePlan(userId: number) {
+    const profiles = (await this.listProfilesByUser(userId)).sort(
+      (a, b) => b.budgetPolicy.nichePriority - a.budgetPolicy.nichePriority
+    );
+    if (!profiles.length) return { leader: null, concentrationShare: 0, profiles: [] as OptimizationProfileState[] };
+
+    const leader = profiles[0];
+    const totalPriority = profiles.reduce((sum, profile) => sum + profile.budgetPolicy.nichePriority, 0) || 1;
+    const leaderShare = clamp(leader.budgetPolicy.nichePriority / totalPriority, 0.7, 0.9);
+
+    return {
+      leader,
+      concentrationShare: Number(leaderShare.toFixed(3)),
+      profiles,
+    };
+  },
+
   async recordOutcome(input: ObjectiveOutcomeInput) {
     const profile = await this.getProfile(input.userId, input.nicheId);
     const evaluation = this.evaluateObjective({ metrics: input.metrics, baseline: profile.performanceBaseline, objectiveWeights: profile.objectiveWeights });

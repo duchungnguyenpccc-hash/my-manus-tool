@@ -17,24 +17,44 @@ export const autonomousGrowthService = {
     for (const userId of userIds) {
       await objectiveEngine.rebalancePortfolio(userId);
     }
+    const dominancePlans = new Map(
+      await Promise.all(userIds.map(async (userId) => [userId, await objectiveEngine.getDominancePlan(userId)] as const))
+    );
 
     const launchedCampaigns = activeCampaigns
       .map(async (campaign) => {
         const profile = await objectiveEngine.getProfile(campaign.userId, campaign.nicheId);
+        const plan = dominancePlans.get(campaign.userId);
+        const isLeader = plan?.leader?.nicheId === campaign.nicheId;
         if (!profile.autonomousMode || profile.budgetPolicy.nichePriority < 0.75) return false;
+        if (!isLeader && (plan?.concentrationShare ?? 0) >= 0.7 && profile.budgetPolicy.nichePriority < 1) return false;
 
         await topicMiningService.mineAndQueueTopics({
           nicheId: campaign.nicheId,
           userId: campaign.userId,
-          limit: Math.max(10, Math.min(30, profile.productionPolicy.replicationCount)),
-          boostPriority: Math.round((1 - profile.productionPolicy.explorationRate) * 20 + profile.budgetPolicy.nichePriority * 5),
-          source: "autonomous_mode",
+          limit: Math.max(
+            isLeader ? 20 : 5,
+            Math.min(isLeader ? 40 : 12, Math.round(profile.productionPolicy.replicationCount * (isLeader ? 1.4 : 0.45)))
+          ),
+          boostPriority: Math.round(
+            (1 - profile.productionPolicy.explorationRate) * 20 +
+              profile.budgetPolicy.nichePriority * 5 +
+              (isLeader ? 20 : -5)
+          ),
+          source: isLeader ? "dominance_mode" : "autonomous_mode",
         });
 
         await batchProductionService.createBatch({
           userId: campaign.userId,
           nicheId: campaign.nicheId,
-          numberOfVideos: Math.max(1, Math.round(profile.productionPolicy.videosPerDay * profile.budgetPolicy.nichePriority)),
+          numberOfVideos: Math.max(
+            1,
+            Math.round(
+              profile.productionPolicy.videosPerDay *
+                profile.budgetPolicy.nichePriority *
+                (isLeader ? Math.max(1.4, plan?.concentrationShare ?? 1) : 0.35)
+            )
+          ),
         });
         return true;
       });

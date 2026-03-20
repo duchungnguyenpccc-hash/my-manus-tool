@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { nicheTopicQueue, topicCandidates } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { budgetEngine } from "./budgetEngine";
+import { competitionEngine } from "./competitionEngine";
 import { objectiveEngine } from "./objectiveEngine";
 import { patternEngine } from "./patternEngine";
 import { strategyEngine, type StrategyTopicScore } from "./strategyEngine";
@@ -12,11 +13,14 @@ export type DecisionTopicScore = StrategyTopicScore & {
   patternScore: number;
   trendVelocity: number;
   trendFreshness: number;
+  competitionScore: number;
+  competitiveScore: number;
   budgetDecision: Awaited<ReturnType<typeof budgetEngine.allocate>>;
   sourceEvidence: {
     competingVideos: number;
     medianViews: number;
     momentumScore: number;
+    difficulty: "low" | "medium" | "high";
   };
   factorWeights: { ctr: number; retention: number; demand: number };
   decisionContext: {
@@ -44,7 +48,11 @@ function toTerms(topic: string) {
 
 export const decisionEngine = {
   async evaluateTopic(input: { userId: number; nicheId: number; topic: string; title?: string; monthlyBudget?: number; dailyVideoQuota?: number }): Promise<DecisionTopicScore> {
-    const [historical, profile] = await Promise.all([getHistoricalPatterns(input.userId, input.nicheId), objectiveEngine.getProfile(input.userId, input.nicheId)]);
+    const [historical, profile, competition] = await Promise.all([
+      getHistoricalPatterns(input.userId, input.nicheId),
+      objectiveEngine.getProfile(input.userId, input.nicheId),
+      competitionEngine.analyzeTopic(input.topic),
+    ]);
     const strategy = await strategyEngine.scoreTopic({ topic: input.topic, title: input.title, historicalTopics: historical });
     const trending = await getYouTubeTrendingVideos("all", 20);
     const terms = toTerms(input.topic);
@@ -62,7 +70,25 @@ export const decisionEngine = {
     };
 
     const baseAdaptive = factorSignals.ctr * profile.factorWeights.ctr + factorSignals.retention * profile.factorWeights.retention + factorSignals.demand * profile.factorWeights.demand;
-    const adaptiveScore = Number(clamp(baseAdaptive + patternSignal.netScore * 0.12 + trendMomentum.momentumScore / 500, 0, 1.5).toFixed(3));
+    const competitiveScore = Number(
+      clamp(
+        strategy.viralProbability / 100 * 0.45 +
+          (100 - competition.competitionScore) / 100 * 0.3 +
+          competition.timingScore / 100 * 0.25,
+        0,
+        1
+      ).toFixed(3)
+    );
+    const adaptiveScore = Number(
+      clamp(
+        baseAdaptive +
+          patternSignal.netScore * 0.12 +
+          trendMomentum.momentumScore / 500 +
+          competitiveScore * 0.25,
+        0,
+        1.5
+      ).toFixed(3)
+    );
     const adaptiveThreshold = Math.max(0.48, Math.min(0.95, profile.performanceBaseline.averageObjectiveScore * 0.52 + (profile.budgetPolicy.nichePriority - 1) * 0.08));
 
     const budgetDecision = await budgetEngine.allocate({
@@ -91,9 +117,16 @@ export const decisionEngine = {
       patternScore: patternSignal.netScore,
       trendVelocity: trendMomentum.velocityScore,
       trendFreshness: trendMomentum.freshnessScore,
+      competitionScore: competition.competitionScore,
+      competitiveScore,
       factorWeights: profile.factorWeights,
       budgetDecision,
-      sourceEvidence: { competingVideos: related.length, medianViews, momentumScore: trendMomentum.momentumScore },
+      sourceEvidence: {
+        competingVideos: related.length,
+        medianViews,
+        momentumScore: trendMomentum.momentumScore,
+        difficulty: competition.difficulty,
+      },
       decisionContext: {
         factorSignals,
         blacklistedPatterns,
