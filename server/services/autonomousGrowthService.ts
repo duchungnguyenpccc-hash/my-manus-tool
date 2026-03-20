@@ -10,32 +10,37 @@ let started = false;
 export const autonomousGrowthService = {
   async runCycle() {
     const db = await getDb();
-    if (!db) return { processed: 0, launched: 0 };
+    if (!db) return { processed: 0, launched: 0, rebalancedUsers: 0 };
 
     const activeCampaigns = await db.select().from(campaigns).where(eq(campaigns.status, "active")).orderBy(desc(campaigns.updatedAt)).limit(20);
-    let launched = 0;
-
-    for (const campaign of activeCampaigns) {
-      const profile = await objectiveEngine.getProfile(campaign.userId, campaign.nicheId);
-      if (!profile.autonomousMode) continue;
-
-      await topicMiningService.mineAndQueueTopics({
-        nicheId: campaign.nicheId,
-        userId: campaign.userId,
-        limit: Math.max(10, Math.min(25, profile.productionPolicy.replicationCount)),
-        boostPriority: Math.round((1 - profile.productionPolicy.explorationRate) * 20),
-        source: "autonomous_mode",
-      });
-
-      await batchProductionService.createBatch({
-        userId: campaign.userId,
-        nicheId: campaign.nicheId,
-        numberOfVideos: Math.max(1, Math.round(profile.productionPolicy.videosPerDay)),
-      });
-      launched += 1;
+    const userIds = Array.from(new Set(activeCampaigns.map((campaign) => campaign.userId)));
+    for (const userId of userIds) {
+      await objectiveEngine.rebalancePortfolio(userId);
     }
 
-    return { processed: activeCampaigns.length, launched };
+    const launchedCampaigns = activeCampaigns
+      .map(async (campaign) => {
+        const profile = await objectiveEngine.getProfile(campaign.userId, campaign.nicheId);
+        if (!profile.autonomousMode || profile.budgetPolicy.nichePriority < 0.75) return false;
+
+        await topicMiningService.mineAndQueueTopics({
+          nicheId: campaign.nicheId,
+          userId: campaign.userId,
+          limit: Math.max(10, Math.min(30, profile.productionPolicy.replicationCount)),
+          boostPriority: Math.round((1 - profile.productionPolicy.explorationRate) * 20 + profile.budgetPolicy.nichePriority * 5),
+          source: "autonomous_mode",
+        });
+
+        await batchProductionService.createBatch({
+          userId: campaign.userId,
+          nicheId: campaign.nicheId,
+          numberOfVideos: Math.max(1, Math.round(profile.productionPolicy.videosPerDay * profile.budgetPolicy.nichePriority)),
+        });
+        return true;
+      });
+
+    const launched = (await Promise.all(launchedCampaigns)).filter(Boolean).length;
+    return { processed: activeCampaigns.length, launched, rebalancedUsers: userIds.length };
   },
 
   start() {

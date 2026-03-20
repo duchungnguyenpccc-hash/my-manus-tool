@@ -5,6 +5,7 @@ import {
   getTrendingTopics,
   getYouTubeTrendingVideos,
   analyzeContentPerformance,
+  calculateTrendMomentum,
 } from "./trendResearchService";
 import axios from "axios";
 import { calculateTopicNoveltyScore, rankTopicsByViralPotential } from "./youtubeAlgorithmSimulatorService";
@@ -138,7 +139,7 @@ export const trendResearchEngineService = {
 
     for (const v of youtubeTrends) {
       const perf = analyzeContentPerformance(v.views, v.likes, v.comments, v.uploadedAt);
-      const score = Math.round(perf.viewsPerDay + perf.engagementScore * 100);
+      const score = Math.round(perf.viewsPerDay + perf.engagementScore * 100 + perf.momentum.momentumScore * 3);
       seeds.push({ keyword: v.title, score, source: "youtube_trending" });
     }
 
@@ -199,6 +200,10 @@ export const trendResearchEngineService = {
 
     const ranked = ideas.map((idea) => {
       const viral = rankedViral.ranked.find((item) => item.topic === idea.topic);
+      const trendMomentum = calculateTrendMomentum(
+        Math.max(1000, (idea.demandSeed ?? 50) * 500),
+        new Date(Date.now() - Math.max(1, 72 - (idea.demandSeed ?? 50)) * 60 * 60 * 1000).toISOString()
+      );
       const novelty = calculateTopicNoveltyScore(
         idea.topic,
         existingTopics.filter((topic) => topic !== idea.topic)
@@ -208,7 +213,14 @@ export const trendResearchEngineService = {
       const searchDemand = Math.min(100, Math.round((idea.demandSeed ?? 50) * 0.45 + (viral?.scores.demand ?? 50) * 0.55));
       const viralScore = Math.min(
         100,
-        Math.round((viral?.scores.viralProbability ?? 50) * 0.45 + searchDemand * 0.25 + novelty * 0.2 + monetizationFit * 0.1)
+        Math.round(
+          (viral?.scores.viralProbability ?? 50) * 0.35 +
+            searchDemand * 0.2 +
+            novelty * 0.15 +
+            monetizationFit * 0.1 +
+            trendMomentum.velocityScore * 0.1 +
+            trendMomentum.freshnessScore * 0.1
+        )
       );
 
       return {
@@ -219,7 +231,7 @@ export const trendResearchEngineService = {
         novelty,
         monetizationFit,
         viralScore,
-        priority: Math.max(1, 101 - viralScore),
+        priority: Math.max(1, 101 - viralScore + (trendMomentum.freshnessScore < 35 ? 12 : 0)),
       } satisfies RankedTopicIdea;
     });
 
